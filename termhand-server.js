@@ -268,6 +268,7 @@ function registerRoutes(app) {
     res.setHeader('Content-Type', contentType);
     res.sendFile(p);
   };
+  app.get('/manifest',  serveFile('manifest.json', 'application/json'));
   app.get('/bridge-js', serveFile('bridge.js', 'application/javascript'));
   app.get('/ui-js',     serveFile('ui.js',     'application/javascript'));
   app.get('/ui-html',   serveFile('ui.html',   'text/html'));

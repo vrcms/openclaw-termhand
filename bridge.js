@@ -59,24 +59,25 @@ async function checkUpdate(andApply) {
       console.log(`[TermHand] ============================================`);
       return true;
     }
-    // 下载新版文件（bridge.js + ui.js + ui.html）
+    // 从 manifest.json 获取文件列表，逐一下载
     console.log(`[TermHand] 正在下载 v${latest}...`);
     const selfDir = path.dirname(path.resolve(process.argv[1]));
-    const files = [
-      { url: `${VPS_DOWNLOAD}/bridge-js`, file: 'bridge.js', fallback: `${GITHUB_RAW}/bridge.js` },
-      { url: `${VPS_DOWNLOAD}/ui-js`, file: 'ui.js', fallback: `${GITHUB_RAW}/ui.js` },
-      { url: `${VPS_DOWNLOAD}/ui-html`, file: 'ui.html', fallback: `${GITHUB_RAW}/ui.html` },
-    ];
-    for (const f of files) {
-      let code;
+    let manifest;
+    try {
+      manifest = JSON.parse(await fetchText(`${VPS_DOWNLOAD}/manifest`));
+    } catch (e) {
+      // fallback: 只更新 bridge.js
+      manifest = { files: [{ name: 'bridge.js', url: '/bridge-js' }] };
+    }
+    for (const f of manifest.files) {
       try {
-        code = await fetchText(f.url);
+        const code = await fetchText(`${VPS_DOWNLOAD}${f.url}`);
         if (!code || code.length < 10) throw new Error('空文件');
+        fs.writeFileSync(path.join(selfDir, f.name), code, 'utf8');
+        console.log(`[TermHand] 已更新 ${f.name}`);
       } catch (e) {
-        try { code = await fetchText(f.fallback); } catch (e2) { console.warn(`[TermHand] 跳过 ${f.file}: ${e2.message}`); continue; }
+        console.warn(`[TermHand] 跳过 ${f.name}: ${e.message}`);
       }
-      fs.writeFileSync(path.join(selfDir, f.file), code, 'utf8');
-      console.log(`[TermHand] 已更新 ${f.file}`);
     }
     console.log(`[TermHand] 更新完成！请重新运行: node bridge.js --server ... --token ...`);
     process.exit(0);

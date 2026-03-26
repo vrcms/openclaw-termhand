@@ -1,0 +1,8 @@
+{
+  "version": "0.1.4",
+  "files": [
+    { "name": "bridge.js",  "url": "/bridge-js"  },
+    { "name": "ui.js",      "url": "/ui-js"      },
+    { "name": "ui.html",    "url": "/ui-html"    }
+  ]
+}
