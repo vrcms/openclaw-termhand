@@ -1,6 +1,6 @@
 {
   "name": "termhand",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "TermHand (终端手) - 远程控制本地终端",
   "main": "server.js",
   "scripts": {
