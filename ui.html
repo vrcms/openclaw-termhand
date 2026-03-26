@@ -93,6 +93,16 @@ function connect() {
     } else if (msg.type === 'sessions') {
       console.log('[WS] sessions update:', msg.sessions.length, 'sessions', msg.sessions.map(s=>s.id));
       updateSessions(msg.sessions);
+      // 如果有待选中的新 session，自动切换
+      if (window.__pendingSessionId) {
+        const pending = window.__pendingSessionId;
+        const found = msg.sessions.find(s => s.id === pending);
+        if (found) {
+          console.log('[WS] auto-select pending session', pending);
+          window.__pendingSessionId = null;
+          setTimeout(() => selectSession(pending), 100);
+        }
+      }
     } else if (msg.type === 'session_closed') {
       removeSession(msg.sessionId);
     } else {
@@ -211,14 +221,24 @@ async function doCreateSession() {
     const data = await r.json();
     console.log('[CREATE] /api/new-session response:', JSON.stringify(data));
     if (data.ok) {
-      // 主动刷新 session 列表，不依赖 WS 推送
-      const sr = await fetch('/api/sessions');
-      const sd = await sr.json();
-      console.log('[CREATE] /api/sessions response:', JSON.stringify(sd));
-      const list = Array.isArray(sd) ? sd : (sd.sessions || []);
-      updateSessions(list);
-      // 自动切换到新 session
-      setTimeout(() => { console.log('[CREATE] selectSession', id); selectSession(id); }, 200);
+      console.log('[CREATE] session_new sent, waiting for WS sessions update...');
+      // WS 会推送 sessions 消息，等待后自动切换
+      // 设置一个一次性监听，WS 收到 sessions 后自动选中新 session
+      window.__pendingSessionId = id;
+      // 备用：1.5秒后轮询一次
+      setTimeout(async () => {
+        if (window.__pendingSessionId === id) {
+          console.log('[CREATE] fallback poll /api/sessions');
+          try {
+            const sr = await fetch('/api/sessions');
+            const sd = await sr.json();
+            const list = Array.isArray(sd) ? sd : (sd.sessions || []);
+            console.log('[CREATE] fallback got', list.length, 'sessions');
+            if (list.length > 0) updateSessions(list);
+          } catch(e) { console.error('[CREATE] fallback err', e); }
+          window.__pendingSessionId = null;
+        }
+      }, 1500);
       // 创建后自动发送启动命令
       if (cmd) {
         setTimeout(() => {
@@ -226,7 +246,7 @@ async function doCreateSession() {
           if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'input', sessionId: id, data: cmd + '\r' }));
           }
-        }, 800);
+        }, 1200);
       }
     } else {
       console.error('[CREATE] new-session failed:', data);
