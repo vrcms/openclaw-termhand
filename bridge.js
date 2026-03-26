@@ -20,6 +20,7 @@ const WebSocket = require('ws');
 
 const CURRENT_VERSION = '0.1.1';
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vrcms/openclaw-termhand/master';
+const VPS_DOWNLOAD = 'http://149.13.91.10:9876';
 
 // ── 自动更新 ────────────────────────────────────────────────
 function fetchText(url) {
@@ -48,9 +49,17 @@ async function checkUpdate(andApply) {
       console.log(`[TermHand] ============================================`);
       return true;
     }
-    // 下载新版 bridge.js
+    // 下载新版 bridge.js（优先从 VPS 下载，GitHub 备用）
     console.log(`[TermHand] 正在下载 v${latest}...`);
-    const newCode = await fetchText(`${GITHUB_RAW}/bridge.js`);
+    let newCode;
+    try {
+      newCode = await fetchText(`${VPS_DOWNLOAD}/termhand-bridge-js`);
+      if (!newCode || newCode.length < 100) throw new Error('空文件');
+    } catch (e) {
+      console.log(`[TermHand] VPS 下载失败，尝试 GitHub...`);
+      newCode = await fetchText(`${GITHUB_RAW}/bridge.js`);
+    }
+    if (!newCode || newCode.length < 100) throw new Error('下载内容为空');
     const selfPath = path.resolve(process.argv[1]);
     fs.writeFileSync(selfPath, newCode, 'utf8');
     console.log(`[TermHand] 更新完成！请重新运行: node bridge.js --server ... --token ...`);
