@@ -4,6 +4,7 @@
  *
  * 用法:
  *   node bridge.js --server ws://YOUR_VPS_IP:9877/termhand-ws --token YOUR_TOKEN
+ *   node bridge.js --update   # 检查并更新到最新版本
  *
  * Windows: cmd、PowerShell 都支持
  * Mac/Linux: bash、zsh 都支持
@@ -12,17 +13,70 @@
 const { spawn } = require('child_process');
 const os = require('os');
 const path = require('path');
+const https = require('https');
+const http = require('http');
+const fs = require('fs');
 const WebSocket = require('ws');
+
+const CURRENT_VERSION = '0.1.0';
+const GITHUB_RAW = 'https://raw.githubusercontent.com/vrcms/openclaw-termhand/master';
+
+// ── 自动更新 ────────────────────────────────────────────────
+function fetchText(url) {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith('https') ? https : http;
+    mod.get(url, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => resolve(data));
+    }).on('error', reject);
+  });
+}
+
+async function checkUpdate(andApply) {
+  try {
+    const pkg = JSON.parse(await fetchText(`${GITHUB_RAW}/package.json`));
+    const latest = pkg.version;
+    if (latest === CURRENT_VERSION) {
+      if (andApply) console.log(`[TermHand] 已是最新版本 v${CURRENT_VERSION}`);
+      return false;
+    }
+    console.log(`[TermHand] ============================================`);
+    console.log(`[TermHand] 发现新版本 v${latest}（当前 v${CURRENT_VERSION}）`);
+    if (!andApply) {
+      console.log(`[TermHand] 升级方法: Ctrl+C 退出后运行 node bridge.js --update`);
+      console.log(`[TermHand] ============================================`);
+      return true;
+    }
+    // 下载新版 bridge.js
+    console.log(`[TermHand] 正在下载 v${latest}...`);
+    const newCode = await fetchText(`${GITHUB_RAW}/bridge.js`);
+    const selfPath = path.resolve(process.argv[1]);
+    fs.writeFileSync(selfPath, newCode, 'utf8');
+    console.log(`[TermHand] 更新完成！请重新运行: node bridge.js --server ... --token ...`);
+    process.exit(0);
+  } catch (e) {
+    if (andApply) console.error('[TermHand] 更新失败:', e.message);
+  }
+  return false;
+}
 
 // ── 参数解析 ────────────────────────────────────────────────
 const args = process.argv.slice(2);
 const getArg = (name) => { const i = args.indexOf(name); return i !== -1 ? args[i + 1] : null; };
+
+// --update 模式
+if (args.includes('--update')) {
+  checkUpdate(true);
+  process.exit(0);
+}
 
 const SERVER_URL = getArg('--server') || process.env.TERMHAND_SERVER;
 const TOKEN = getArg('--token') || process.env.TERMHAND_TOKEN;
 
 if (!SERVER_URL || !TOKEN) {
   console.error('Usage: node bridge.js --server ws://VPS_IP:9877/termhand-ws --token YOUR_TOKEN');
+  console.error('       node bridge.js --update   # 升级到最新版本');
   console.error('Or set TERMHAND_SERVER and TERMHAND_TOKEN environment variables');
   process.exit(1);
 }
@@ -242,6 +296,9 @@ function connect() {
     console.log('[Bridge] Connected to TermHand Server');
     console.log(`[Bridge] Platform: ${process.platform} ${process.arch} @ ${os.hostname()}`);
     console.log(`[Bridge] Node: ${process.version}`);
+
+    // 连接成功后异步检查更新（不阻塞主流程）
+    checkUpdate(false).catch(() => {});
 
     // 上报 bridge 信息
     sendToServer({
