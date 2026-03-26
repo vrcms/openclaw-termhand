@@ -215,7 +215,8 @@ async function doCreateSession() {
       const sr = await fetch('/api/sessions');
       const sd = await sr.json();
       console.log('[CREATE] /api/sessions response:', JSON.stringify(sd));
-      if (sd.sessions) updateSessions(sd.sessions);
+      const list = Array.isArray(sd) ? sd : (sd.sessions || []);
+      updateSessions(list);
       // 自动切换到新 session
       setTimeout(() => { console.log('[CREATE] selectSession', id); selectSession(id); }, 200);
       // 创建后自动发送启动命令
