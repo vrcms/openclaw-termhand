@@ -173,6 +173,10 @@ function renderTermArea() {
 }
 
 function sendInput(sessionId, data) {
+  // 本地 echo：让用户看到自己输入的内容
+  if (terms[sessionId]) {
+    terms[sessionId].write(data);
+  }
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'input', sessionId, data }));
   }
