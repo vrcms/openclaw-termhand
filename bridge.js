@@ -19,7 +19,7 @@ const fs = require('fs');
 const WebSocket = require('ws');
 const { startUIServer } = require('./ui');
 
-const CURRENT_VERSION = '0.1.28';
+const CURRENT_VERSION = '0.1.29';
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vrcms/openclaw-termhand/master';
 const VPS_DOWNLOAD = 'http://149.13.91.10:9877';
 
@@ -296,23 +296,16 @@ function handleServerMessage(msg) {
       const result = createSession(sessionId, shell, cwd);
       // Windows: 自动切换 UTF-8 编码 + 切换到指定目录
       if (!result.existed && process.platform === 'win32') {
+        // 等 cmd.exe 启动后一次性发所有初始化命令
         setTimeout(() => {
-          inputToSession(sessionId, 'chcp 65001\r\n');
+          let init = 'chcp 65001\r\n';
           if (cwd) {
-            // 提取盘符，如 D:\path -> D:
             const driveMatch = cwd.match(/^([A-Za-z]:)/);
-            if (driveMatch) {
-              const drive = driveMatch[1].toUpperCase();
-              // 先切换盘符，再 cd 到目录
-              setTimeout(() => {
-                inputToSession(sessionId, drive + '\r\n');
-                setTimeout(() => {
-                  inputToSession(sessionId, 'cd /d "' + cwd + '"\r\n');
-                }, 200);
-              }, 400);
-            }
+            if (driveMatch) init += driveMatch[1].toUpperCase() + '\r\n';
+            init += 'cd /d "' + cwd + '"\r\n';
           }
-        }, 300);
+          inputToSession(sessionId, init);
+        }, 400);
       }
       sendToServer({ type: 'session_ready', sessionId, existed: result.existed });
       break;
