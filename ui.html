@@ -199,7 +199,8 @@ function renderTermArea() {
 }
 
 function sendInput(sessionId, data) {
-  // 不做本地 echo，PTY 会自动 echo，避免双显
+  // cmd.exe 管道模式不会 echo，需要本地 echo
+  if (terms[sessionId]) terms[sessionId].write(data);
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'input', sessionId, data }));
   }
