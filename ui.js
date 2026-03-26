@@ -11,7 +11,7 @@ const { WebSocketServer } = require('ws');
 
 const uiClients = new Set(); // 所有 UI WebSocket 连接
 
-function startUIServer(sessions, port) {
+function startUIServer(sessions, port, sendToServer) {
   port = port || 7654;
 
   const server = http.createServer((req, res) => {
@@ -103,6 +103,10 @@ function startUIServer(sessions, port) {
             const data = msg.data.replace(/\r(?!\n)/g, '\r\n');
             if (session.proc && session.proc.stdin) session.proc.stdin.write(data);
             else if (session.proc && session.proc.write) session.proc.write(data);
+          }
+          // 异步上报给 VPS 记录（fire-and-forget，不影响本地响应速度）
+          if (typeof sendToServer === 'function') {
+            sendToServer({ type: 'session_input_log', sessionId: msg.sessionId, data: msg.data });
           }
         }
       } catch (e) {}

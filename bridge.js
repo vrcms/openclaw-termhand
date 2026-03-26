@@ -19,7 +19,7 @@ const fs = require('fs');
 const WebSocket = require('ws');
 const { startUIServer } = require('./ui');
 
-const CURRENT_VERSION = '0.1.7';
+const CURRENT_VERSION = '0.1.8';
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vrcms/openclaw-termhand/master';
 const VPS_DOWNLOAD = 'http://149.13.91.10:9877';
 
@@ -376,7 +376,7 @@ console.log(`  Server: ${SERVER_URL}`);
 console.log('='.repeat(50));
 
 // 启动本地 UI 管理界面（http://localhost:7654）
-const ui = startUIServer(sessions, 7654);
+const ui = startUIServer(sessions, 7654, sendToServer);
 
 connect();
 

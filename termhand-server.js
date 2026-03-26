@@ -8,7 +8,9 @@ const fs = require('fs');
 const path = require('path');
 
 const CONFIG_FILE = path.join(process.env.HOME || '/root', '.openclaw/termhand/config.json');
+const LOG_DIR = path.join(process.env.HOME || '/root', '.openclaw/termhand/logs');
 fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true });
+fs.mkdirSync(LOG_DIR, { recursive: true });
 
 function loadConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); }
@@ -70,6 +72,9 @@ function appendOutput(sessionId, text) {
   const buf = sessionOutputs.get(sessionId);
   buf.push(text);
   if (buf.length > 500) buf.splice(0, buf.length - 500);
+  // 持久化到文件（异步，不阻塞）
+  const logFile = path.join(LOG_DIR, `${sessionId}.log`);
+  fs.appendFile(logFile, text, () => {});
 }
 
 // ── Bridge WS 处理 ──────────────────────────────────────────
@@ -87,8 +92,14 @@ function handleBridgeMessage(msg) {
 
     case 'session_output':
       appendOutput(msg.sessionId, msg.text);
-      // 如果有等待输出的 poll，不在这里处理（poll 是主动读取）
       break;
+
+    case 'session_input_log': {
+      // 记录用户输入到日志（加前缀方便区分）
+      const inputLog = path.join(LOG_DIR, `${msg.sessionId}.log`);
+      fs.appendFile(inputLog, `[INPUT] ${msg.data}`, () => {});
+      break;
+    }
 
     case 'session_exit':
       appendOutput(msg.sessionId, `\n[Session exited with code ${msg.exitCode}]\n`);
