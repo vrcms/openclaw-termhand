@@ -34,6 +34,7 @@ function startUIServer(sessions, port, sendToServer) {
       const list = Array.from(sessions.entries()).map(([id, s]) => ({
         id,
         shell: s.shell || 'shell',
+      cwd: s.cwd || null,
         lastOutput: (Array.isArray(s.outputBuf) ? s.outputBuf : [])
           .join('').replace(/\x1b\[[\d;]*[mGKHF]/g, '').replace(/[\r\n]+/g, ' ').trim().slice(-200),
       }));
@@ -66,6 +67,25 @@ function startUIServer(sessions, port, sendToServer) {
       return;
     }
 
+    if (url === '/api/new-session' && req.method === 'POST') {
+      let body = '';
+      req.on('data', d => body += d);
+      req.on('end', () => {
+        try {
+          const { sessionId, cwd } = JSON.parse(body);
+          if (typeof sendToServer === 'function') {
+            sendToServer({ type: 'session_new', sessionId: sessionId || ('s' + Date.now()), cwd: cwd || null });
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true }));
+        } catch (e) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ ok: false, error: e.message }));
+        }
+      });
+      return;
+    }
+
     res.writeHead(404);
     res.end('Not found');
   });
@@ -79,6 +99,7 @@ function startUIServer(sessions, port, sendToServer) {
     const list = Array.from(sessions.entries()).map(([id, s]) => ({
       id,
       shell: s.shell || 'shell',
+      cwd: s.cwd || null,
       lastOutput: (Array.isArray(s.outputBuf) ? s.outputBuf : [])
         .join('').replace(/\x1b\[[\d;]*[mGKHF]/g, '').replace(/[\r\n]+/g, ' ').trim().slice(-200),
     }));
@@ -139,6 +160,7 @@ function startUIServer(sessions, port, sendToServer) {
     const list = Array.from(sessions.entries()).map(([id, s]) => ({
       id,
       shell: s.shell || 'shell',
+      cwd: s.cwd || null,
       lastOutput: (Array.isArray(s.outputBuf) ? s.outputBuf : [])
         .join('').replace(/\x1b\[[\d;]*[mGKHF]/g, '').replace(/[\r\n]+/g, ' ').trim().slice(-200),
     }));

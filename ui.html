@@ -12,11 +12,15 @@ body { display: flex; height: 100vh; font-family: 'Segoe UI', sans-serif; backgr
 #sidebar { width: 240px; min-width: 160px; background: #252526; border-right: 1px solid #333; display: flex; flex-direction: column; }
 #sidebar h2 { padding: 12px 16px; font-size: 13px; text-transform: uppercase; color: #888; letter-spacing: 1px; border-bottom: 1px solid #333; }
 #session-list { flex: 1; overflow-y: auto; }
-.session-item { padding: 10px 16px; cursor: pointer; border-bottom: 1px solid #2d2d2d; transition: background .1s; }
+.session-group { border-bottom: 1px solid #2d2d2d; }
+.session-group-header { padding: 6px 12px; font-size: 11px; color: #888; background: #1e1e1e; display: flex; align-items: center; gap: 6px; }
+.session-group-cwd { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace; }
+.session-item { padding: 8px 16px 8px 24px; cursor: pointer; border-bottom: 1px solid #252526; transition: background .1s; }
 .session-item:hover { background: #2a2d2e; }
 .session-item.active { background: #094771; }
 .session-id { font-size: 13px; font-weight: 600; color: #4ec9b0; }
 .session-shell { font-size: 11px; color: #888; margin-top: 2px; }
+#new-session-btn { margin: 8px 12px; padding: 5px 10px; background: #0e639c; border: none; color: #fff; border-radius: 3px; cursor: pointer; font-size: 11px; width: calc(100% - 24px); }
 .session-preview { font-size: 11px; color: #666; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: monospace; }
 #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 #toolbar { padding: 8px 16px; background: #2d2d2d; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 12px; font-size: 12px; }
@@ -38,6 +42,7 @@ body { display: flex; height: 100vh; font-family: 'Segoe UI', sans-serif; backgr
 <div id="sidebar">
   <h2>⚡ TermHand</h2>
   <div id="session-list"><div style="padding:16px;color:#555;font-size:12px">等待 bridge 连接...</div></div>
+  <button id="new-session-btn" onclick="newSession()">＋ 新建 Session</button>
 </div>
 <div id="main">
   <div id="toolbar">
@@ -108,13 +113,38 @@ function renderSidebar() {
     el.innerHTML = '<div style="padding:16px;color:#555;font-size:12px">暂无活动 session</div>';
     return;
   }
-  el.innerHTML = sessions.map(s => `
-    <div class="session-item ${activeSession===s.id?'active':''}" onclick="selectSession('${s.id}')">
-      <div class="session-id">${s.id}</div>
-      <div class="session-shell">${s.shell}</div>
-      <div class="session-preview" id="preview-${s.id}">${escHtml(s.lastOutput||'')}</div>
+  // 按 cwd 分组
+  const groups = {};
+  sessions.forEach(s => {
+    const key = s.cwd || '默认目录';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(s);
+  });
+  el.innerHTML = Object.entries(groups).map(([cwd, list]) => `
+    <div class="session-group">
+      <div class="session-group-header">
+        <span>📁</span>
+        <span class="session-group-cwd" title="${escHtml(cwd)}">${escHtml(cwd.split(/[\\/]/).pop() || cwd)}</span>
+        <span style="font-size:10px;opacity:.6" title="${escHtml(cwd)}">${list.length}</span>
+      </div>
+      ${list.map(s => `
+        <div class="session-item ${activeSession===s.id?'active':''}" onclick="selectSession('${s.id}')">
+          <div class="session-id">${s.id}</div>
+          <div class="session-preview" id="preview-${s.id}">${escHtml(s.lastOutput||'')}</div>
+        </div>
+      `).join('')}
     </div>
   `).join('');
+}
+
+function newSession() {
+  const cwd = prompt('工作目录（留空使用默认）:', '');
+  const id = 's' + (sessions.length + 1);
+  fetch('/api/new-session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: id, cwd: cwd || null })
+  }).catch(() => {});
 }
 
 function updatePreview(sessionId, data) {

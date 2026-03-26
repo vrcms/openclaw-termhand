@@ -19,7 +19,7 @@ const fs = require('fs');
 const WebSocket = require('ws');
 const { startUIServer } = require('./ui');
 
-const CURRENT_VERSION = '0.1.11';
+const CURRENT_VERSION = '0.1.12';
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vrcms/openclaw-termhand/master';
 const VPS_DOWNLOAD = 'http://149.13.91.10:9877';
 
@@ -119,13 +119,15 @@ function getDefaultShell(preferred) {
 // ── Session 管理 ─────────────────────────────────────────────
 const sessions = new Map(); // sessionId -> { proc, outputBuf, shell }
 
-function createSession(sessionId, shell) {
+function createSession(sessionId, shell, cwd) {
   if (sessions.has(sessionId)) {
     return { existed: true };
   }
 
   const shellPath = getDefaultShell(shell);
   const isWindows = process.platform === 'win32';
+  const defaultCwd = process.env.HOME || process.env.USERPROFILE || '.';
+  const sessionCwd = cwd || defaultCwd;
 
   // Windows: cmd /Q（安静模式）+ chcp 65001 切换 UTF-8, Unix: 交互式 bash
   const shellArgs = isWindows ? ['/Q'] : [];
@@ -133,7 +135,7 @@ function createSession(sessionId, shell) {
   if (isWindows) env['PYTHONIOENCODING'] = 'utf-8';
 
   const proc = spawn(shellPath, shellArgs, {
-    cwd: process.env.HOME || process.env.USERPROFILE || '.',
+    cwd: sessionCwd,
     env,
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true,
@@ -142,6 +144,7 @@ function createSession(sessionId, shell) {
   const session = {
     proc,
     shell: shellPath,
+    cwd: sessionCwd,
     outputBuf: [],
     createdAt: Date.now(),
   };
@@ -255,8 +258,8 @@ function handleServerMessage(msg) {
   switch (msg.type) {
 
     case 'session_new': {
-      const { sessionId, shell } = msg;
-      const result = createSession(sessionId, shell);
+      const { sessionId, shell, cwd } = msg;
+      const result = createSession(sessionId, shell, cwd);
       // Windows: 自动切换 UTF-8 编码
       if (!result.existed && process.platform === 'win32') {
         setTimeout(() => inputToSession(sessionId, 'chcp 65001\r\n'), 300);

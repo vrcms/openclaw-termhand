@@ -151,13 +151,15 @@ function handleBridgeConnection(ws, req) {
   console.log('[TermHand] Bridge connected');
 
   // 自动重建上次活跃的 session
-  const autoSessions = config.autoSessions || ['s1'];
+  const autoSessions = config.autoSessions || [{ id: 's1' }];
   setTimeout(async () => {
-    for (const sid of autoSessions) {
+    for (const s of autoSessions) {
+      const sid = typeof s === 'string' ? s : s.id;
+      const cwd = typeof s === 'string' ? undefined : s.cwd;
       try {
-        sendToBridge({ type: 'session_new', sessionId: sid });
+        sendToBridge({ type: 'session_new', sessionId: sid, cwd });
         await waitForResponse('new_' + sid, 8000);
-        console.log(`[TermHand] Auto-restored session: ${sid}`);
+        console.log(`[TermHand] Auto-restored session: ${sid} (${cwd || 'default'})`);
       } catch (e) {
         console.warn(`[TermHand] Auto-restore ${sid} failed:`, e.message);
       }
@@ -208,14 +210,15 @@ function registerRoutes(app) {
   // 新建 session
   app.post('/termhand/session/new', async (req, res) => {
     try {
-      const { sessionId, shell } = req.body;
+      const { sessionId, shell, cwd } = req.body;
       const id = sessionId || 'session-' + Date.now();
-      sendToBridge({ type: 'session_new', sessionId: id, shell });
+      sendToBridge({ type: 'session_new', sessionId: id, shell, cwd });
       const result = await waitForResponse('new_' + id, 10000);
       // 持久化到 autoSessions，下次 bridge 重连自动重建
       if (!config.autoSessions) config.autoSessions = [];
-      if (!config.autoSessions.includes(id)) {
-        config.autoSessions.push(id);
+      const alreadyIn = config.autoSessions.some(s => (typeof s === 'string' ? s : s.id) === id);
+      if (!alreadyIn) {
+        config.autoSessions.push({ id, cwd: cwd || null });
         saveConfig(config);
       }
       res.json({ ok: true, sessionId: id, ...result });
@@ -268,7 +271,7 @@ function registerRoutes(app) {
       sessionOutputs.delete(id);
       // 从 autoSessions 移除，不再自动重建
       if (config.autoSessions) {
-        config.autoSessions = config.autoSessions.filter(s => s !== id);
+        config.autoSessions = config.autoSessions.filter(s => (typeof s === 'string' ? s : s.id) !== id);
         saveConfig(config);
       }
       res.json({ ok: true, ...result });
