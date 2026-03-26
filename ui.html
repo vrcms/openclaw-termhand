@@ -6,6 +6,8 @@
 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
 <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/layui@2.9.8/dist/css/layui.min.css">
+<script src="https://cdn.jsdelivr.net/npm/layui@2.9.8/dist/layui.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { display: flex; height: 100vh; font-family: 'Segoe UI', sans-serif; background: #1e1e1e; color: #ccc; overflow: hidden; }
@@ -137,14 +139,67 @@ function renderSidebar() {
   `).join('');
 }
 
+// 目录树缓存
+const dirCache = {};
+
+async function browseDir(p) {
+  if (dirCache[p]) return dirCache[p];
+  try {
+    const r = await fetch('/api/browse?path=' + encodeURIComponent(p));
+    const d = await r.json();
+    dirCache[p] = d.dirs || [];
+    return dirCache[p];
+  } catch { return []; }
+}
+
+function renderDirTree(dirs, selectedRef, container) {
+  container.innerHTML = dirs.length === 0
+    ? '<div style="color:#888;padding:8px">（空目录）</div>'
+    : dirs.map(d => `
+      <div class="dir-item" data-path="${escHtml(d.path)}" style="padding:5px 10px;cursor:pointer;border-radius:3px;display:flex;align-items:center;gap:6px">
+        <span>📁</span><span style="font-size:13px">${escHtml(d.name)}</span>
+      </div>
+    `).join('');
+  container.querySelectorAll('.dir-item').forEach(el => {
+    el.addEventListener('click', async () => {
+      container.querySelectorAll('.dir-item').forEach(x => x.style.background = '');
+      el.style.background = '#094771';
+      selectedRef.value = el.dataset.path;
+      document.getElementById('th-cwd-input').value = el.dataset.path;
+      // 展开子目录
+      const sub = await browseDir(el.dataset.path);
+      if (sub.length > 0) renderDirTree(sub, selectedRef, container);
+    });
+  });
+}
+
 function newSession() {
-  const cwd = prompt('工作目录（留空使用默认）:', '');
-  const id = 's' + (sessions.length + 1);
-  fetch('/api/new-session', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId: id, cwd: cwd || null })
-  }).catch(() => {});
+  const selectedRef = { value: '' };
+  layer.open({
+    type: 1,
+    title: '新建 Session',
+    area: ['480px', '420px'],
+    content: `
+      <div style="padding:16px">
+        <div style="margin-bottom:8px;font-size:12px;color:#888">工作目录</div>
+        <div style="display:flex;gap:6px;margin-bottom:10px">
+          <input id="th-cwd-input" type="text" placeholder="留空使用默认目录" style="flex:1;padding:6px 10px;background:#2d2d2d;border:1px solid #555;color:#ccc;border-radius:3px;font-size:13px">
+          <button onclick="(async()=>{const p=document.getElementById('th-cwd-input').value||'C:\\\\';const dirs=await browseDir(p);renderDirTree(dirs,{value:p},document.getElementById('th-dir-tree'))})()" style="padding:6px 12px;background:#0e639c;border:none;color:#fff;border-radius:3px;cursor:pointer">浏览</button>
+        </div>
+        <div id="th-dir-tree" style="height:220px;overflow-y:auto;background:#1e1e1e;border:1px solid #333;border-radius:3px;padding:4px"></div>
+        <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
+          <button onclick="layer.closeAll()" style="padding:6px 16px;background:#3c3c3c;border:1px solid #555;color:#ccc;border-radius:3px;cursor:pointer">取消</button>
+          <button onclick="(()=>{const cwd=document.getElementById('th-cwd-input').value||null;const id='s'+(sessions.length+1);fetch('/api/new-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:id,cwd})}).catch(()=>{});layer.closeAll()})()" style="padding:6px 16px;background:#0e639c;border:none;color:#fff;border-radius:3px;cursor:pointer">创建</button>
+        </div>
+      </div>
+    `,
+    success: async () => {
+      // 默认加载根目录
+      const root = navigator.platform.includes('Win') ? 'C:\\' : '/';
+      const dirs = await browseDir(root);
+      renderDirTree(dirs, selectedRef, document.getElementById('th-dir-tree'));
+    }
+  });
 }
 
 function updatePreview(sessionId, data) {

@@ -67,6 +67,24 @@ function startUIServer(sessions, port, sendToServer) {
       return;
     }
 
+    if (url.startsWith('/api/browse') && req.method === 'GET') {
+      const qs = new URL(req.url, 'http://localhost').searchParams;
+      const dirPath = qs.get('path') || (process.platform === 'win32' ? 'C:\\' : '/');
+      try {
+        const entries = require('fs').readdirSync(dirPath, { withFileTypes: true });
+        const dirs = entries
+          .filter(e => e.isDirectory() && !e.name.startsWith('.'))
+          .map(e => ({ name: e.name, path: require('path').join(dirPath, e.name) }))
+          .slice(0, 100); // 最多100个
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, dirs }));
+      } catch (e) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, dirs: [], error: e.message }));
+      }
+      return;
+    }
+
     if (url === '/api/new-session' && req.method === 'POST') {
       let body = '';
       req.on('data', d => body += d);
