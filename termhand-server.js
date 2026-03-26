@@ -252,6 +252,16 @@ function registerRoutes(app) {
     }
   });
 
+  // 直接返回最新 bridge.js（供 --update 自升级使用）
+  app.get('/bridge-js', (req, res) => {
+    const bridgePath = require('path').resolve(__dirname, 'bridge.js');
+    if (!require('fs').existsSync(bridgePath)) {
+      return res.status(404).json({ error: 'bridge.js not found' });
+    }
+    res.setHeader('Content-Type', 'application/javascript');
+    res.sendFile(bridgePath);
+  });
+
   // 一次性执行命令（不保持 session）
   app.post('/termhand/exec', async (req, res) => {
     try {

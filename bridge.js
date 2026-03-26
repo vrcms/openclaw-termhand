@@ -20,7 +20,7 @@ const WebSocket = require('ws');
 
 const CURRENT_VERSION = '0.1.2';
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vrcms/openclaw-termhand/master';
-const VPS_DOWNLOAD = 'http://149.13.91.10:9876';
+const VPS_DOWNLOAD = 'http://149.13.91.10:9877';
 
 // ── 自动更新 ────────────────────────────────────────────────
 function fetchText(url) {
@@ -53,7 +53,7 @@ async function checkUpdate(andApply) {
     console.log(`[TermHand] 正在下载 v${latest}...`);
     let newCode;
     try {
-      newCode = await fetchText(`${VPS_DOWNLOAD}/termhand-bridge-js`);
+      newCode = await fetchText(`${VPS_DOWNLOAD}/bridge-js`);
       if (!newCode || newCode.length < 100) throw new Error('空文件');
     } catch (e) {
       console.log(`[TermHand] VPS 下载失败，尝试 GitHub...`);
