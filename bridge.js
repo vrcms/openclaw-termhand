@@ -19,7 +19,7 @@ const fs = require('fs');
 const WebSocket = require('ws');
 const { startUIServer } = require('./ui');
 
-const CURRENT_VERSION = '0.1.24';
+const CURRENT_VERSION = '0.1.25';
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vrcms/openclaw-termhand/master';
 const VPS_DOWNLOAD = 'http://149.13.91.10:9877';
 
@@ -353,6 +353,10 @@ function handleServerMessage(msg) {
 
     case 'ping':
       sendToServer({ type: 'pong' });
+      break;
+
+    case 'get_version':
+      if (ui) ui.broadcastVersionInfo(CURRENT_VERSION, null);
       break;
 
     case 'check_update':

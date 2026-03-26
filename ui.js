@@ -169,7 +169,7 @@ function startUIServer(sessions, port, sendToServer, serverWsUrl, token) {
     ws.on('message', (raw) => {
       try {
         const msg = JSON.parse(raw);
-        if (msg.type === 'check_update' || msg.type === 'do_update') {
+        if (msg.type === 'get_version' || msg.type === 'check_update' || msg.type === 'do_update') {
           if (typeof sendToServer === 'function') {
             sendToServer({ type: msg.type });
           }

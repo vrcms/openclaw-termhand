@@ -95,6 +95,8 @@ function connect() {
     hideReconnecting();
     document.getElementById('s-connected').textContent = '🟢 已连接';
     document.getElementById('status-bar').classList.remove('disconnected');
+    // 主动请求版本信息
+    ws.send(JSON.stringify({ type: 'get_version' }));
   };
   ws.onclose = () => {
     document.getElementById('s-connected').textContent = '⚫ 未连接';
