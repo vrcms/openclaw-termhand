@@ -19,7 +19,7 @@ const fs = require('fs');
 const WebSocket = require('ws');
 const { startUIServer } = require('./ui');
 
-const CURRENT_VERSION = '0.1.23';
+const CURRENT_VERSION = '0.1.24';
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vrcms/openclaw-termhand/master';
 const VPS_DOWNLOAD = 'http://149.13.91.10:9877';
 
@@ -398,6 +398,7 @@ function connect() {
     // 上报 bridge 信息
     sendToServer({
       type: 'bridge_hello',
+      version: CURRENT_VERSION,
       platform: process.platform,
       arch: process.arch,
       hostname: os.hostname(),
