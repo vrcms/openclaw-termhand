@@ -143,6 +143,8 @@ function renderSidebar() {
 const dirCache = {};
 
 async function browseDir(p) {
+  // 规范化路径：确保盘符格式正确，如 d: → D:\
+  if (/^[a-zA-Z]:$/.test(p.trim())) p = p.trim().toUpperCase() + '\\';
   if (dirCache[p]) return dirCache[p];
   try {
     const r = await fetch('/api/browse?path=' + encodeURIComponent(p));
@@ -150,6 +152,14 @@ async function browseDir(p) {
     dirCache[p] = d.dirs || [];
     return dirCache[p];
   } catch { return []; }
+}
+
+async function doBrowse() {
+  const input = document.getElementById('th-cwd-input');
+  let p = (input && input.value.trim()) || 'C:\\';
+  const dirs = await browseDir(p);
+  const tree = document.getElementById('th-dir-tree');
+  if (tree) renderDirTree(dirs, {}, tree);
 }
 
 function renderDirTree(dirs, selectedRef, container) {
@@ -184,9 +194,16 @@ function newSession() {
         <div style="margin-bottom:8px;font-size:12px;color:#888">工作目录</div>
         <div style="display:flex;gap:6px;margin-bottom:10px">
           <input id="th-cwd-input" type="text" placeholder="留空使用默认目录" style="flex:1;padding:6px 10px;background:#2d2d2d;border:1px solid #555;color:#ccc;border-radius:3px;font-size:13px">
-          <button onclick="(async()=>{const p=document.getElementById('th-cwd-input').value||'C:\\\\';const dirs=await browseDir(p);renderDirTree(dirs,{value:p},document.getElementById('th-dir-tree'))})()" style="padding:6px 12px;background:#0e639c;border:none;color:#fff;border-radius:3px;cursor:pointer">浏览</button>
+          <button onclick="doBrowse()" style="padding:6px 12px;background:#0e639c;border:none;color:#fff;border-radius:3px;cursor:pointer">浏览</button>
         </div>
-        <div id="th-dir-tree" style="height:220px;overflow-y:auto;background:#1e1e1e;border:1px solid #333;border-radius:3px;padding:4px"></div>
+        <div style="margin-bottom:6px;display:flex;gap:4px;flex-wrap:wrap">
+          <span style="font-size:11px;color:#888;align-self:center">快捷:</span>
+          <button onclick="document.getElementById('th-cwd-input').value='C:\\\\';doBrowse()" style="padding:2px 8px;background:#3c3c3c;border:1px solid #555;color:#ccc;border-radius:3px;cursor:pointer;font-size:11px">C:</button>
+          <button onclick="document.getElementById('th-cwd-input').value='D:\\\\';doBrowse()" style="padding:2px 8px;background:#3c3c3c;border:1px solid #555;color:#ccc;border-radius:3px;cursor:pointer;font-size:11px">D:</button>
+          <button onclick="document.getElementById('th-cwd-input').value='E:\\\\';doBrowse()" style="padding:2px 8px;background:#3c3c3c;border:1px solid #555;color:#ccc;border-radius:3px;cursor:pointer;font-size:11px">E:</button>
+          <button onclick="document.getElementById('th-cwd-input').value='/';doBrowse()" style="padding:2px 8px;background:#3c3c3c;border:1px solid #555;color:#ccc;border-radius:3px;cursor:pointer;font-size:11px">/</button>
+        </div>
+        <div id="th-dir-tree" style="height:190px;overflow-y:auto;background:#1e1e1e;border:1px solid #333;border-radius:3px;padding:4px"></div>
         <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
           <button onclick="layer.closeAll()" style="padding:6px 16px;background:#3c3c3c;border:1px solid #555;color:#ccc;border-radius:3px;cursor:pointer">取消</button>
           <button onclick="(()=>{const cwd=document.getElementById('th-cwd-input').value||null;const id='s'+(sessions.length+1);fetch('/api/new-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:id,cwd})}).catch(()=>{});layer.closeAll()})()" style="padding:6px 16px;background:#0e639c;border:none;color:#fff;border-radius:3px;cursor:pointer">创建</button>
