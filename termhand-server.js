@@ -150,6 +150,20 @@ function handleBridgeConnection(ws, req) {
   bridgeInfo = null;
   console.log('[TermHand] Bridge connected');
 
+  // 自动重建上次活跃的 session
+  const autoSessions = config.autoSessions || ['s1'];
+  setTimeout(async () => {
+    for (const sid of autoSessions) {
+      try {
+        sendToBridge({ type: 'session_new', sessionId: sid });
+        await waitForResponse('new_' + sid, 8000);
+        console.log(`[TermHand] Auto-restored session: ${sid}`);
+      } catch (e) {
+        console.warn(`[TermHand] Auto-restore ${sid} failed:`, e.message);
+      }
+    }
+  }, 1000);
+
   ws.on('message', (data) => {
     let msg;
     try { msg = JSON.parse(data.toString()); }
@@ -198,6 +212,12 @@ function registerRoutes(app) {
       const id = sessionId || 'session-' + Date.now();
       sendToBridge({ type: 'session_new', sessionId: id, shell });
       const result = await waitForResponse('new_' + id, 10000);
+      // 持久化到 autoSessions，下次 bridge 重连自动重建
+      if (!config.autoSessions) config.autoSessions = [];
+      if (!config.autoSessions.includes(id)) {
+        config.autoSessions.push(id);
+        saveConfig(config);
+      }
       res.json({ ok: true, sessionId: id, ...result });
     } catch (e) {
       res.status(500).json({ ok: false, error: e.message });
@@ -246,6 +266,11 @@ function registerRoutes(app) {
       sendToBridge({ type: 'session_kill', sessionId: id });
       const result = await waitForResponse('kill_' + id, 5000);
       sessionOutputs.delete(id);
+      // 从 autoSessions 移除，不再自动重建
+      if (config.autoSessions) {
+        config.autoSessions = config.autoSessions.filter(s => s !== id);
+        saveConfig(config);
+      }
       res.json({ ok: true, ...result });
     } catch (e) {
       res.status(500).json({ ok: false, error: e.message });
