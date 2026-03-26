@@ -36,8 +36,17 @@ function fetchText(url) {
 
 async function checkUpdate(andApply) {
   try {
-    const pkg = JSON.parse(await fetchText(`${GITHUB_RAW}/package.json`));
-    const latest = pkg.version;
+    // 优先从 VPS 读版本（无缓存），GitHub 备用
+    let latest;
+    try {
+      const remoteCode = await fetchText(`${VPS_DOWNLOAD}/bridge-js`);
+      const match = remoteCode.match(/const CURRENT_VERSION = '([^']+)'/);
+      if (!match) throw new Error('version not found in bridge-js');
+      latest = match[1];
+    } catch (e) {
+      const pkg = JSON.parse(await fetchText(`${GITHUB_RAW}/package.json`));
+      latest = pkg.version;
+    }
     if (latest === CURRENT_VERSION) {
       if (andApply) console.log(`[TermHand] 已是最新版本 v${CURRENT_VERSION}`);
       return false;
