@@ -1,5 +1,5 @@
 {
-  "version": "0.1.19",
+  "version": "0.1.20",
   "files": [
     { "name": "bridge.js",  "url": "/bridge-js"  },
     { "name": "ui.js",      "url": "/ui-js"      },
