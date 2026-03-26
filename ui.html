@@ -130,7 +130,7 @@ function connect() {
       const el = document.getElementById('s-version');
       if (!el) return;
       // 始终显示当前版本（可点击）
-      el.innerHTML = `<span style="color:#888;cursor:pointer;text-decoration:underline dotted" onclick="checkUpdate()" title="点击检查更新">v${msg.current}</span>`;
+      el.innerHTML = `<span style="color:#bbb;cursor:pointer;text-decoration:underline dotted" onclick="checkUpdate()" title="点击检查更新">v${msg.current}</span>`;
       // 如果有检查结果，弹窗显示
       if (msg._showResult) {
         if (msg.error) {
