@@ -59,19 +59,25 @@ async function checkUpdate(andApply) {
       console.log(`[TermHand] ============================================`);
       return true;
     }
-    // 下载新版 bridge.js（优先从 VPS 下载，GitHub 备用）
+    // 下载新版文件（bridge.js + ui.js + ui.html）
     console.log(`[TermHand] 正在下载 v${latest}...`);
-    let newCode;
-    try {
-      newCode = await fetchText(`${VPS_DOWNLOAD}/bridge-js`);
-      if (!newCode || newCode.length < 100) throw new Error('空文件');
-    } catch (e) {
-      console.log(`[TermHand] VPS 下载失败，尝试 GitHub...`);
-      newCode = await fetchText(`${GITHUB_RAW}/bridge.js`);
+    const selfDir = path.dirname(path.resolve(process.argv[1]));
+    const files = [
+      { url: `${VPS_DOWNLOAD}/bridge-js`, file: 'bridge.js', fallback: `${GITHUB_RAW}/bridge.js` },
+      { url: `${VPS_DOWNLOAD}/ui-js`, file: 'ui.js', fallback: `${GITHUB_RAW}/ui.js` },
+      { url: `${VPS_DOWNLOAD}/ui-html`, file: 'ui.html', fallback: `${GITHUB_RAW}/ui.html` },
+    ];
+    for (const f of files) {
+      let code;
+      try {
+        code = await fetchText(f.url);
+        if (!code || code.length < 10) throw new Error('空文件');
+      } catch (e) {
+        try { code = await fetchText(f.fallback); } catch (e2) { console.warn(`[TermHand] 跳过 ${f.file}: ${e2.message}`); continue; }
+      }
+      fs.writeFileSync(path.join(selfDir, f.file), code, 'utf8');
+      console.log(`[TermHand] 已更新 ${f.file}`);
     }
-    if (!newCode || newCode.length < 100) throw new Error('下载内容为空');
-    const selfPath = path.resolve(process.argv[1]);
-    fs.writeFileSync(selfPath, newCode, 'utf8');
     console.log(`[TermHand] 更新完成！请重新运行: node bridge.js --server ... --token ...`);
     process.exit(0);
   } catch (e) {

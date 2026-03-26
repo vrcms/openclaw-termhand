@@ -261,15 +261,16 @@ function registerRoutes(app) {
     res.download(zipPath, 'termhand.zip');
   });
 
-  // 直接返回最新 bridge.js（供 --update 自升级使用）
-  app.get('/bridge-js', (req, res) => {
-    const bridgePath = require('path').resolve(__dirname, 'bridge.js');
-    if (!require('fs').existsSync(bridgePath)) {
-      return res.status(404).json({ error: 'bridge.js not found' });
-    }
-    res.setHeader('Content-Type', 'application/javascript');
-    res.sendFile(bridgePath);
-  });
+  // 直接返回最新文件（供 --update 自升级使用）
+  const serveFile = (filePath, contentType) => (req, res) => {
+    const p = require('path').resolve(__dirname, filePath);
+    if (!require('fs').existsSync(p)) return res.status(404).json({ error: `${filePath} not found` });
+    res.setHeader('Content-Type', contentType);
+    res.sendFile(p);
+  };
+  app.get('/bridge-js', serveFile('bridge.js', 'application/javascript'));
+  app.get('/ui-js',     serveFile('ui.js',     'application/javascript'));
+  app.get('/ui-html',   serveFile('ui.html',   'text/html'));
 
   // 一次性执行命令（不保持 session）
   app.post('/termhand/exec', async (req, res) => {
