@@ -379,7 +379,7 @@ console.log(`  Server: ${SERVER_URL}`);
 console.log('='.repeat(50));
 
 // 启动本地 UI 管理界面（http://localhost:7654）
-const ui = startUIServer(sessions, 7654, sendToServer);
+const ui = startUIServer(sessions, 7654, sendToServer, SERVER_URL, TOKEN);
 
 connect();
 

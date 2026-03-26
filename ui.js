@@ -11,8 +11,18 @@ const { WebSocketServer } = require('ws');
 
 const uiClients = new Set(); // 所有 UI WebSocket 连接
 
-function startUIServer(sessions, port, sendToServer) {
+function startUIServer(sessions, port, sendToServer, serverWsUrl, token) {
   port = port || 7654;
+  // 从 ws://host:port/path 解析出 HTTP host:port
+  let serverHost = '149.13.91.10';
+  let serverPort = 9877;
+  if (serverWsUrl) {
+    try {
+      const u = new URL(serverWsUrl.replace(/^ws/, 'http'));
+      serverHost = u.hostname;
+      serverPort = parseInt(u.port) || 9877;
+    } catch(e) {}
+  }
 
   const server = http.createServer((req, res) => {
     const url = req.url.split('?')[0];
@@ -88,14 +98,38 @@ function startUIServer(sessions, port, sendToServer) {
     if (url === '/api/new-session' && req.method === 'POST') {
       let body = '';
       req.on('data', d => body += d);
-      req.on('end', () => {
+      req.on('end', async () => {
         try {
           const { sessionId, cwd } = JSON.parse(body);
-          if (typeof sendToServer === 'function') {
-            sendToServer({ type: 'session_new', sessionId: sessionId || ('s' + Date.now()), cwd: cwd || null });
-          }
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: true }));
+          const id = sessionId || ('s' + Date.now());
+          // 直接调 VPS HTTP 接口创建 session（不走 WS）
+          const http = require('http');
+          const postData = JSON.stringify({ sessionId: id, cwd: cwd || null });
+          const options = {
+            hostname: serverHost,
+            port: serverPort,
+            path: '/termhand/session/new',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-termhand-token': token,
+              'Content-Length': Buffer.byteLength(postData)
+            }
+          };
+          const vpsReq = http.request(options, vpsRes => {
+            let data = '';
+            vpsRes.on('data', d => data += d);
+            vpsRes.on('end', () => {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(data);
+            });
+          });
+          vpsReq.on('error', e => {
+            res.writeHead(500);
+            res.end(JSON.stringify({ ok: false, error: e.message }));
+          });
+          vpsReq.write(postData);
+          vpsReq.end();
         } catch (e) {
           res.writeHead(400);
           res.end(JSON.stringify({ ok: false, error: e.message }));
