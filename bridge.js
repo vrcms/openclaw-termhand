@@ -19,7 +19,7 @@ const fs = require('fs');
 const WebSocket = require('ws');
 const { startUIServer } = require('./ui');
 
-const CURRENT_VERSION = '0.1.20';
+const CURRENT_VERSION = '0.1.21';
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vrcms/openclaw-termhand/master';
 const VPS_DOWNLOAD = 'http://149.13.91.10:9877';
 
@@ -97,13 +97,37 @@ if (args.includes('--update')) {
   return;
 }
 
-const SERVER_URL = getArg('--server') || process.env.TERMHAND_SERVER;
-const TOKEN = getArg('--token') || process.env.TERMHAND_TOKEN;
+// ── 本地配置文件（存储连接参数，避免每次输入命令行）──────────
+const BRIDGE_CONFIG_FILE = path.join(os.homedir(), '.termhand-bridge.json');
+
+function loadBridgeConfig() {
+  try { return JSON.parse(fs.readFileSync(BRIDGE_CONFIG_FILE, 'utf8')); }
+  catch { return {}; }
+}
+
+function saveBridgeConfig(cfg) {
+  try {
+    fs.writeFileSync(BRIDGE_CONFIG_FILE, JSON.stringify(cfg, null, 2));
+    console.log(`[TermHand] 配置已保存到 ${BRIDGE_CONFIG_FILE}`);
+  } catch (e) { console.warn('[TermHand] 配置保存失败:', e.message); }
+}
+
+const bridgeCfg = loadBridgeConfig();
+
+// 命令行 > 环境变量 > 本地配置文件
+let SERVER_URL = getArg('--server') || process.env.TERMHAND_SERVER || bridgeCfg.server;
+let TOKEN = getArg('--token') || process.env.TERMHAND_TOKEN || bridgeCfg.token;
+
+// 如果命令行传了参数，自动保存到配置文件
+if (getArg('--server') || getArg('--token')) {
+  saveBridgeConfig({ ...bridgeCfg, server: SERVER_URL, token: TOKEN });
+}
 
 if (!SERVER_URL || !TOKEN) {
-  console.error('Usage: node bridge.js --server ws://VPS_IP:9877/termhand-ws --token YOUR_TOKEN');
-  console.error('       node bridge.js --update   # 升级到最新版本');
-  console.error('Or set TERMHAND_SERVER and TERMHAND_TOKEN environment variables');
+  console.error('首次使用请传入连接参数（之后会自动保存，无需再次输入）:');
+  console.error('  node bridge.js --server ws://VPS_IP:9877/termhand-ws --token YOUR_TOKEN');
+  console.error('  node bridge.js --update   # 升级到最新版本');
+  console.error(`配置文件位置: ${BRIDGE_CONFIG_FILE}`);
   process.exit(1);
 }
 
