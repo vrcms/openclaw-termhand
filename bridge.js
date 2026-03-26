@@ -156,7 +156,7 @@ function createSession(sessionId, shell) {
     session.outputBuf.push(text);
     if (session.outputBuf.length > 1000) session.outputBuf.shift();
     sendToServer({ type: 'session_output', sessionId, text });
-    if (ui) ui.broadcast(sessionId, text);
+    if (ui) ui.broadcastOutput(sessionId, text);
   });
 
   proc.stderr.on('data', (data) => {
@@ -164,13 +164,14 @@ function createSession(sessionId, shell) {
     session.outputBuf.push(text);
     if (session.outputBuf.length > 1000) session.outputBuf.shift();
     sendToServer({ type: 'session_output', sessionId, text });
-    if (ui) ui.broadcast(sessionId, text);
+    if (ui) ui.broadcastOutput(sessionId, text);
   });
 
   proc.on('exit', (code) => {
     sessions.delete(sessionId);
     sendToServer({ type: 'session_exit', sessionId, exitCode: code });
     console.log(`[Bridge] Session ${sessionId} exited with code ${code}`);
+    if (ui) ui.broadcastSessions();
   });
 
   proc.on('error', (err) => {
@@ -180,6 +181,7 @@ function createSession(sessionId, shell) {
 
   sessions.set(sessionId, session);
   console.log(`[Bridge] Created session ${sessionId} (${shellPath})`);
+  if (ui) ui.broadcastSessions();
   return { existed: false };
 }
 
