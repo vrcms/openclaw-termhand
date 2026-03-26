@@ -252,6 +252,15 @@ function registerRoutes(app) {
     }
   });
 
+  // 下载 termhand.zip 安装包
+  app.get('/download', (req, res) => {
+    const zipPath = require('path').resolve(__dirname, 'termhand.zip');
+    if (!require('fs').existsSync(zipPath)) {
+      return res.status(404).json({ error: 'termhand.zip not found' });
+    }
+    res.download(zipPath, 'termhand.zip');
+  });
+
   // 直接返回最新 bridge.js（供 --update 自升级使用）
   app.get('/bridge-js', (req, res) => {
     const bridgePath = require('path').resolve(__dirname, 'bridge.js');
