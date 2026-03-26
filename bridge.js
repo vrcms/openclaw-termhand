@@ -19,7 +19,7 @@ const fs = require('fs');
 const WebSocket = require('ws');
 const { startUIServer } = require('./ui');
 
-const CURRENT_VERSION = '0.1.22';
+const CURRENT_VERSION = '0.1.23';
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vrcms/openclaw-termhand/master';
 const VPS_DOWNLOAD = 'http://149.13.91.10:9877';
 
@@ -355,6 +355,14 @@ function handleServerMessage(msg) {
       sendToServer({ type: 'pong' });
       break;
 
+    case 'check_update':
+      checkUpdate(false).then(hasUpdate => {
+        if (ui) ui.broadcastVersionInfo(CURRENT_VERSION, hasUpdate ? latestVersionCache : false, null, true);
+      }).catch(e => {
+        if (ui) ui.broadcastVersionInfo(CURRENT_VERSION, null, e.message, true);
+      });
+      break;
+
     case 'do_update':
       console.log('[Bridge] UI 触发更新...');
       checkUpdate(true).then(() => {
@@ -384,12 +392,8 @@ function connect() {
     console.log(`[Bridge] Platform: ${process.platform} ${process.arch} @ ${os.hostname()}`);
     console.log(`[Bridge] Node: ${process.version}`);
 
-    // 连接成功后异步检查更新，结果推给 UI
-    checkUpdate(false).then(hasUpdate => {
-      if (ui) ui.broadcastVersionInfo(CURRENT_VERSION, hasUpdate ? latestVersionCache : null);
-    }).catch(() => {
-      if (ui) ui.broadcastVersionInfo(CURRENT_VERSION, null);
-    });
+    // 连接成功后推送当前版本给 UI
+    if (ui) ui.broadcastVersionInfo(CURRENT_VERSION, null);
 
     // 上报 bridge 信息
     sendToServer({

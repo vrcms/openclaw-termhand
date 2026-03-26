@@ -169,10 +169,9 @@ function startUIServer(sessions, port, sendToServer, serverWsUrl, token) {
     ws.on('message', (raw) => {
       try {
         const msg = JSON.parse(raw);
-        if (msg.type === 'do_update') {
-          // 转发给 bridge 的 handleServerMessage
+        if (msg.type === 'check_update' || msg.type === 'do_update') {
           if (typeof sendToServer === 'function') {
-            sendToServer({ type: 'do_update' });
+            sendToServer({ type: msg.type });
           }
           return;
         }
@@ -214,8 +213,8 @@ function startUIServer(sessions, port, sendToServer, serverWsUrl, token) {
   }
 
   // 广播：session 列表更新
-  function broadcastVersionInfo(current, latest) {
-    const msg = JSON.stringify({ type: 'version_info', current, latest });
+  function broadcastVersionInfo(current, latest, error, showResult) {
+    const msg = JSON.stringify({ type: 'version_info', current, latest, error: error || null, _showResult: !!showResult });
     for (const c of uiClients) {
       if (c.readyState === 1) c.send(msg);
     }
@@ -236,7 +235,7 @@ function startUIServer(sessions, port, sendToServer, serverWsUrl, token) {
     }
   }
 
-  return { broadcastOutput, broadcastSessions, broadcastVersionInfo, server };
+  return { broadcastOutput, broadcastSessions, broadcastVersionInfo: (c,l,e,s) => broadcastVersionInfo(c,l,e,s), server };
 }
 
 module.exports = { startUIServer };

@@ -127,11 +127,25 @@ function connect() {
     } else if (msg.type === 'version_info') {
       const el = document.getElementById('s-version');
       if (!el) return;
-      if (msg.latest && msg.latest !== msg.current) {
-        el.innerHTML = `<span style="color:#f0a500;cursor:pointer" onclick="confirmUpdate('${msg.latest}')" title="点击升级">v${msg.current} → v${msg.latest} ⬆️</span>`;
-      } else {
-        el.textContent = `v${msg.current}`;
-        el.style.color = '#888';
+      // 始终显示当前版本（可点击）
+      el.innerHTML = `<span style="color:#888;cursor:pointer;text-decoration:underline dotted" onclick="checkUpdate()" title="点击检查更新">v${msg.current}</span>`;
+      // 如果有检查结果，弹窗显示
+      if (msg._showResult) {
+        if (msg.error) {
+          layer.msg('检查更新失败: ' + msg.error, { time: 3000 });
+        } else if (msg.latest === false) {
+          layer.msg('✅ 已是最新版本 v' + msg.current, { time: 2000 });
+        } else if (msg.latest && msg.latest !== msg.current) {
+          layer.confirm(`发现新版本 <b>v${msg.latest}</b>（当前 v${msg.current}），是否升级？<br><small style="color:#888">升级后 bridge 将自动重启，约需 10-20 秒</small>`, {
+            btn: ['立即升级', '稍后再说']
+          }, () => {
+            layer.closeAll();
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'do_update' }));
+              layer.msg('升级中，请稍候...', { time: 20000 });
+            }
+          });
+        }
       }
     } else {
       console.log('[WS] unknown msg type:', msg.type);
@@ -187,6 +201,15 @@ function renderSidebar() {
       `).join('')}
     </div>
   `).join('');
+}
+
+function checkUpdate() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    layer.msg('bridge 未连接', { time: 2000 });
+    return;
+  }
+  layer.msg('检查更新中...', { time: 3000 });
+  ws.send(JSON.stringify({ type: 'check_update' }));
 }
 
 function confirmUpdate(latest) {
