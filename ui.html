@@ -28,7 +28,8 @@ body { display: flex; height: 100vh; font-family: 'Segoe UI', sans-serif; backgr
 .term-pane:last-child { border-right: none; }
 .term-header { padding: 4px 12px; background: #252526; font-size: 11px; color: #888; border-bottom: 1px solid #333; display: flex; justify-content: space-between; }
 .term-container { flex: 1; overflow: hidden; height: 100%; }
-#status-bar { padding: 3px 16px; background: #007acc; font-size: 11px; color: #fff; display: flex; gap: 16px; }
+#status-bar { padding: 3px 16px; background: #007acc; font-size: 11px; color: #fff; display: flex; gap: 16px; transition: background .3s; }
+#status-bar.disconnected { background: #5a1d1d; }
 .status-item { opacity: .85; }
 #no-session { display: flex; align-items: center; justify-content: center; height: 100%; color: #555; font-size: 14px; }
 </style>
@@ -49,7 +50,7 @@ body { display: flex; height: 100vh; font-family: 'Segoe UI', sans-serif; backgr
     <button onclick="popout()" style="margin-left:auto;padding:3px 10px;background:#3c3c3c;border:1px solid #555;color:#ccc;border-radius:3px;cursor:pointer;font-size:11px">⧉ 独立窗口</button>
   </div>
   <div id="terminal-area"><div id="no-session">请在左侧选择一个 session</div></div>
-  <div id="status-bar">
+  <div id="status-bar" class="disconnected">
     <span class="status-item" id="s-connected">⚫ 未连接</span>
     <span class="status-item" id="s-sessions">0 个 session</span>
     <span class="status-item" id="s-time"></span>
@@ -68,9 +69,11 @@ function connect() {
   ws = new WebSocket(`ws://${location.host}/ui-ws`);
   ws.onopen = () => {
     document.getElementById('s-connected').textContent = '🟢 已连接';
+    document.getElementById('status-bar').classList.remove('disconnected');
   };
   ws.onclose = () => {
     document.getElementById('s-connected').textContent = '⚫ 未连接';
+    document.getElementById('status-bar').classList.add('disconnected');
     setTimeout(connect, 2000);
   };
   ws.onmessage = (e) => {
@@ -95,6 +98,8 @@ function updateSessions(list) {
   list.forEach(s => {
     if (!terms[s.id]) initTerm(s.id);
   });
+  // 自动选中唯一 session
+  if (!activeSession && list.length === 1) selectSession(list[0].id);
 }
 
 function renderSidebar() {
@@ -130,37 +135,38 @@ function removeSession(sessionId) {
 
 function selectSession(id) {
   activeSession = id;
+  document.getElementById('current-session').textContent = id;
   renderSidebar();
   renderTermArea();
-  document.getElementById('current-session').textContent = id;
 }
 
 function initTerm(sessionId) {
   const t = new Terminal({
     theme: { background:'#1e1e1e', foreground:'#d4d4d4', cursor:'#aeafad' },
-    fontSize: 13, fontFamily: 'Consolas, monospace', cursorBlink: true,
+    fontSize: 14,
+    fontFamily: "'Cascadia Code', 'Fira Code', Consolas, 'Courier New', monospace",
+    cursorBlink: true,
+    cursorStyle: 'block',
+    scrollback: 5000,
+    bellStyle: 'none',
     allowProposedApi: true
-  });
-  // 阻止浏览器拦截 Tab、方向键等特殊键
-  t.attachCustomKeyEventHandler((e) => {
-    if (e.key === 'Tab') { e.preventDefault(); return true; }
-    return true;
   });
   const fit = new FitAddon.FitAddon();
   t.loadAddon(fit);
   terms[sessionId] = t;
   fitAddons[sessionId] = fit;
+  // 阻止浏览器拦截 Tab、方向键等特殊键
+  t.attachCustomKeyEventHandler((e) => {
+    if (e.key === 'Tab') { e.preventDefault(); return true; }
+    return true;
+  });
 }
 
 function renderTermArea() {
+  if (!activeSession) return;
   const area = document.getElementById('terminal-area');
-  if (!activeSession) {
-    area.innerHTML = '<div id="no-session">请在左侧选择一个 session</div>';
-    return;
-  }
-  // 根据 layout 渲染 1/2/4 个终端格
   const panes = layout === 1 ? [activeSession] :
-                layout === 2 ? [activeSession, sessions.find(s=>s.id!==activeSession)?.id].filter(Boolean) :
+                layout === 2 ? sessions.slice(0,2).map(s=>s.id) :
                 sessions.slice(0,4).map(s=>s.id);
 
   area.style.flexWrap = layout === 4 ? 'wrap' : 'nowrap';
@@ -193,10 +199,7 @@ function renderTermArea() {
 }
 
 function sendInput(sessionId, data) {
-  // 本地 echo：让用户看到自己输入的内容
-  if (terms[sessionId]) {
-    terms[sessionId].write(data);
-  }
+  // 不做本地 echo，PTY 会自动 echo，避免双显
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'input', sessionId, data }));
   }
@@ -225,19 +228,18 @@ setInterval(() => {
   document.getElementById('s-time').textContent = new Date().toLocaleTimeString('zh');
 }, 1000);
 
-// 初始加载 sessions
+// 初始加载 sessions（WebSocket 为主，轮询为备用）
 async function loadSessions() {
   try {
     const r = await fetch('/api/sessions');
     const list = await r.json();
     updateSessions(list);
-    if (list.length > 0 && !activeSession) selectSession(list[0].id);
   } catch(e) {}
 }
 
 connect();
 loadSessions();
-setInterval(loadSessions, 3000);
+setInterval(loadSessions, 10000); // 降为10秒备用轮询
 </script>
 </body>
 </html>
