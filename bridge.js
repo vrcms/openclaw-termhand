@@ -19,7 +19,7 @@ const fs = require('fs');
 const WebSocket = require('ws');
 const { startUIServer } = require('./ui');
 
-const CURRENT_VERSION = '0.1.29';
+const CURRENT_VERSION = '0.1.30';
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vrcms/openclaw-termhand/master';
 const VPS_DOWNLOAD = 'http://149.13.91.10:9877';
 
@@ -84,7 +84,9 @@ async function checkUpdate(andApply) {
     }
     console.log(`[TermHand] 更新完成！正在重启...`);
     // 用新进程替代自己（detached，不继承 stdio）
-    const child = spawn(process.execPath, process.argv.slice(1), {
+    // 去掉 --update 参数，新进程以正常模式启动
+    const newArgs = process.argv.slice(1).filter(a => a !== '--update');
+    const child = spawn(process.execPath, newArgs, {
       detached: true,
       stdio: 'inherit',
       cwd: selfDir
