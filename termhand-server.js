@@ -6,11 +6,10 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const termdb = require('./db');
 
 const CONFIG_FILE = path.join(process.env.HOME || '/root', '.openclaw/termhand/config.json');
-const LOG_DIR = path.join(process.env.HOME || '/root', '.openclaw/termhand/logs');
 fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true });
-fs.mkdirSync(LOG_DIR, { recursive: true });
 
 function loadConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); }
@@ -64,7 +63,7 @@ function resolveRequest(requestId, data) {
   }
 }
 
-// session 输出缓冲（VPS 侧缓存，供 AI 读取）
+// session 输出缓冲（内存，供实时 poll；持久化走 SQLite）
 const sessionOutputs = new Map(); // sessionId -> string[]
 
 function appendOutput(sessionId, text) {
@@ -72,9 +71,9 @@ function appendOutput(sessionId, text) {
   const buf = sessionOutputs.get(sessionId);
   buf.push(text);
   if (buf.length > 500) buf.splice(0, buf.length - 500);
-  // 持久化到文件（异步，不阻塞）
-  const logFile = path.join(LOG_DIR, `${sessionId}.log`);
-  fs.appendFile(logFile, text, () => {});
+  // 持久化到 SQLite（异步，不阻塞）
+  termdb.appendLog(sessionId, 'output', text);
+  termdb.touchSession(sessionId);
 }
 
 // ── Bridge WS 处理 ──────────────────────────────────────────
@@ -94,12 +93,9 @@ function handleBridgeMessage(msg) {
       appendOutput(msg.sessionId, msg.text);
       break;
 
-    case 'session_input_log': {
-      // 记录用户输入到日志（加前缀方便区分）
-      const inputLog = path.join(LOG_DIR, `${msg.sessionId}.log`);
-      fs.appendFile(inputLog, `[INPUT] ${msg.data}`, () => {});
+    case 'session_input_log':
+      termdb.appendLog(msg.sessionId, 'input', msg.data);
       break;
-    }
 
     case 'session_exit':
       appendOutput(msg.sessionId, `\n[Session exited with code ${msg.exitCode}]\n`);
@@ -150,18 +146,17 @@ function handleBridgeConnection(ws, req) {
   bridgeInfo = null;
   console.log('[TermHand] Bridge connected');
 
-  // 自动重建上次活跃的 session
-  const autoSessions = config.autoSessions || [{ id: 's1' }];
+  // 自动重建上次活跃的 session（从 SQLite 读取）
   setTimeout(async () => {
-    for (const s of autoSessions) {
-      const sid = typeof s === 'string' ? s : s.id;
-      const cwd = typeof s === 'string' ? undefined : s.cwd;
+    const autoSessions = termdb.getAutoRestoreSessions();
+    const list = autoSessions.length > 0 ? autoSessions : [{ id: 's1', cwd: null }];
+    for (const s of list) {
       try {
-        sendToBridge({ type: 'session_new', sessionId: sid, cwd });
-        await waitForResponse('new_' + sid, 8000);
-        console.log(`[TermHand] Auto-restored session: ${sid} (${cwd || 'default'})`);
+        sendToBridge({ type: 'session_new', sessionId: s.id, cwd: s.cwd });
+        await waitForResponse('new_' + s.id, 8000);
+        console.log(`[TermHand] Auto-restored session: ${s.id} (${s.cwd || 'default'})`);
       } catch (e) {
-        console.warn(`[TermHand] Auto-restore ${sid} failed:`, e.message);
+        console.warn(`[TermHand] Auto-restore ${s.id} failed:`, e.message);
       }
     }
   }, 1000);
@@ -214,13 +209,8 @@ function registerRoutes(app) {
       const id = sessionId || 'session-' + Date.now();
       sendToBridge({ type: 'session_new', sessionId: id, shell, cwd });
       const result = await waitForResponse('new_' + id, 10000);
-      // 持久化到 autoSessions，下次 bridge 重连自动重建
-      if (!config.autoSessions) config.autoSessions = [];
-      const alreadyIn = config.autoSessions.some(s => (typeof s === 'string' ? s : s.id) === id);
-      if (!alreadyIn) {
-        config.autoSessions.push({ id, cwd: cwd || null });
-        saveConfig(config);
-      }
+      // 持久化到 SQLite，下次 bridge 重连自动重建
+      termdb.upsertSession(id, cwd || null, shell || null);
       res.json({ ok: true, sessionId: id, ...result });
     } catch (e) {
       res.status(500).json({ ok: false, error: e.message });
@@ -249,6 +239,20 @@ function registerRoutes(app) {
     res.json({ ok: true, sessionId: id, text, totalLines: buf.length });
   });
 
+  // 从 SQLite 读取历史日志（供 AI 分析）
+  app.get('/termhand/session/:id/logs', (req, res) => {
+    const { id } = req.params;
+    const limit = parseInt(req.query.limit) || 200;
+    const logs = termdb.getRecentLogs(id, limit);
+    res.json({ ok: true, sessionId: id, logs });
+  });
+
+  // 列出所有 sessions（从 SQLite）
+  app.get('/termhand/sessions/all', (req, res) => {
+    const rows = termdb.getAutoRestoreSessions();
+    res.json({ ok: true, sessions: rows });
+  });
+
   // 从 bridge 实时读取 session 输出（最近N行）
   app.get('/termhand/session/:id/read', async (req, res) => {
     try {
@@ -269,11 +273,8 @@ function registerRoutes(app) {
       sendToBridge({ type: 'session_kill', sessionId: id });
       const result = await waitForResponse('kill_' + id, 5000);
       sessionOutputs.delete(id);
-      // 从 autoSessions 移除，不再自动重建
-      if (config.autoSessions) {
-        config.autoSessions = config.autoSessions.filter(s => (typeof s === 'string' ? s : s.id) !== id);
-        saveConfig(config);
-      }
+      // 禁用自动重建
+      termdb.disableAutoRestore(id);
       res.json({ ok: true, ...result });
     } catch (e) {
       res.status(500).json({ ok: false, error: e.message });
