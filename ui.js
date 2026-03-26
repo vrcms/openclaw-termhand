@@ -11,7 +11,7 @@ const { WebSocketServer } = require('ws');
 
 const uiClients = new Set(); // 所有 UI WebSocket 连接
 
-function startUIServer(sessions, port, sendToServer, serverWsUrl, token) {
+function startUIServer(sessions, port, sendToServer, serverWsUrl, token, bridgeVersion, onCheckUpdate, onDoUpdate) {
   port = port || 7654;
   // 从 ws://host:port/path 解析出 HTTP host:port
   let serverHost = '149.13.91.10';
@@ -169,10 +169,18 @@ function startUIServer(sessions, port, sendToServer, serverWsUrl, token) {
     ws.on('message', (raw) => {
       try {
         const msg = JSON.parse(raw);
-        if (msg.type === 'get_version' || msg.type === 'check_update' || msg.type === 'do_update') {
-          if (typeof sendToServer === 'function') {
-            sendToServer({ type: msg.type });
-          }
+        if (msg.type === 'get_version') {
+          // 直接本地响应，不走 VPS（版本号由 bridge 启动时注入）
+          ws.send(JSON.stringify({ type: 'version_info', current: bridgeVersion || 'unknown', latest: null }));
+          return;
+        }
+        if (msg.type === 'check_update') {
+          // 通过本地回调处理（不走 VPS）
+          if (typeof onCheckUpdate === 'function') onCheckUpdate(ws);
+          return;
+        }
+        if (msg.type === 'do_update') {
+          if (typeof onDoUpdate === 'function') onDoUpdate();
           return;
         }
         if (msg.type === 'input' && msg.sessionId && msg.data) {
