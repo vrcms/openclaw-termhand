@@ -5,6 +5,7 @@
 <title>TermHand 管理界面</title>
 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { display: flex; height: 100vh; font-family: 'Segoe UI', sans-serif; background: #1e1e1e; color: #ccc; overflow: hidden; }
@@ -26,7 +27,7 @@ body { display: flex; height: 100vh; font-family: 'Segoe UI', sans-serif; backgr
 .term-pane { flex: 1; display: flex; flex-direction: column; border-right: 1px solid #333; overflow: hidden; }
 .term-pane:last-child { border-right: none; }
 .term-header { padding: 4px 12px; background: #252526; font-size: 11px; color: #888; border-bottom: 1px solid #333; display: flex; justify-content: space-between; }
-.term-container { flex: 1; overflow: hidden; }
+.term-container { flex: 1; overflow: hidden; height: 100%; }
 #status-bar { padding: 3px 16px; background: #007acc; font-size: 11px; color: #fff; display: flex; gap: 16px; }
 .status-item { opacity: .85; }
 #no-session { display: flex; align-items: center; justify-content: center; height: 100%; color: #555; font-size: 14px; }
@@ -139,7 +140,10 @@ function initTerm(sessionId) {
     theme: { background:'#1e1e1e', foreground:'#d4d4d4', cursor:'#aeafad' },
     fontSize: 13, fontFamily: 'Consolas, monospace', cursorBlink: true
   });
+  const fit = new FitAddon.FitAddon();
+  t.loadAddon(fit);
   terms[sessionId] = t;
+  fitAddons[sessionId] = fit;
 }
 
 function renderTermArea() {
@@ -167,9 +171,19 @@ function renderTermArea() {
     if (!terms[sid]) initTerm(sid);
     terms[sid].open(container);
     terms[sid].onData(data => sendInput(sid, data));
-    // 滚动到底部
-    terms[sid].scrollToBottom();
+    // fit 撑满容器
+    setTimeout(() => {
+      if (fitAddons[sid]) fitAddons[sid].fit();
+      terms[sid].scrollToBottom();
+    }, 50);
   });
+
+  // 窗口 resize 时重新 fit
+  window.onresize = () => {
+    panes.forEach(sid => {
+      if (fitAddons[sid]) fitAddons[sid].fit();
+    });
+  };
 }
 
 function sendInput(sessionId, data) {
