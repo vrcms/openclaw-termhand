@@ -1,0 +1,17 @@
+{
+  "name": "termhand",
+  "version": "0.1.0",
+  "description": "TermHand (终端手) - 远程控制本地终端",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "bridge": "node bridge.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
