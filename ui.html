@@ -138,7 +138,13 @@ function selectSession(id) {
 function initTerm(sessionId) {
   const t = new Terminal({
     theme: { background:'#1e1e1e', foreground:'#d4d4d4', cursor:'#aeafad' },
-    fontSize: 13, fontFamily: 'Consolas, monospace', cursorBlink: true
+    fontSize: 13, fontFamily: 'Consolas, monospace', cursorBlink: true,
+    allowProposedApi: true
+  });
+  // 阻止浏览器拦截 Tab、方向键等特殊键
+  t.attachCustomKeyEventHandler((e) => {
+    if (e.key === 'Tab') { e.preventDefault(); return true; }
+    return true;
   });
   const fit = new FitAddon.FitAddon();
   t.loadAddon(fit);
