@@ -18,7 +18,7 @@ const http = require('http');
 const fs = require('fs');
 const WebSocket = require('ws');
 
-const CURRENT_VERSION = '0.1.0';
+const CURRENT_VERSION = '0.1.1';
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vrcms/openclaw-termhand/master';
 
 // ── 自动更新 ────────────────────────────────────────────────
