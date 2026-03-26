@@ -19,7 +19,7 @@ const fs = require('fs');
 const WebSocket = require('ws');
 const { startUIServer } = require('./ui');
 
-const CURRENT_VERSION = '0.1.27';
+const CURRENT_VERSION = '0.1.28';
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vrcms/openclaw-termhand/master';
 const VPS_DOWNLOAD = 'http://149.13.91.10:9877';
 
@@ -82,8 +82,15 @@ async function checkUpdate(andApply) {
         console.warn(`[TermHand] 跳过 ${f.name}: ${e.message}`);
       }
     }
-    console.log(`[TermHand] 更新完成！请重新运行: node bridge.js --server ... --token ...`);
-    process.exit(0);
+    console.log(`[TermHand] 更新完成！正在重启...`);
+    // 用新进程替代自己（detached，不继承 stdio）
+    const child = spawn(process.execPath, process.argv.slice(1), {
+      detached: true,
+      stdio: 'inherit',
+      cwd: selfDir
+    });
+    child.unref();
+    setTimeout(() => process.exit(0), 500);
   } catch (e) {
     if (andApply) console.error('[TermHand] 更新失败:', e.message);
   }
