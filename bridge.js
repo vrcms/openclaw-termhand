@@ -19,7 +19,7 @@ const fs = require('fs');
 const WebSocket = require('ws');
 const { startUIServer } = require('./ui');
 
-const CURRENT_VERSION = '0.1.21';
+const CURRENT_VERSION = '0.1.22';
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vrcms/openclaw-termhand/master';
 const VPS_DOWNLOAD = 'http://149.13.91.10:9877';
 
@@ -35,6 +35,8 @@ function fetchText(url) {
   });
 }
 
+let latestVersionCache = null;
+
 async function checkUpdate(andApply) {
   try {
     // 优先从 VPS 读版本（无缓存），GitHub 备用
@@ -48,6 +50,7 @@ async function checkUpdate(andApply) {
       const pkg = JSON.parse(await fetchText(`${GITHUB_RAW}/package.json`));
       latest = pkg.version;
     }
+    latestVersionCache = latest;
     if (latest === CURRENT_VERSION) {
       if (andApply) console.log(`[TermHand] 已是最新版本 v${CURRENT_VERSION}`);
       return false;
@@ -352,6 +355,17 @@ function handleServerMessage(msg) {
       sendToServer({ type: 'pong' });
       break;
 
+    case 'do_update':
+      console.log('[Bridge] UI 触发更新...');
+      checkUpdate(true).then(() => {
+        console.log('[Bridge] 更新完成，重启...');
+        process.exit(0);
+      }).catch(e => {
+        console.error('[Bridge] 更新失败:', e.message);
+        if (ui) ui.broadcastVersionInfo(CURRENT_VERSION, latestVersionCache);
+      });
+      break;
+
     default:
       console.log('[Bridge] Unknown message type:', msg.type);
   }
@@ -370,8 +384,12 @@ function connect() {
     console.log(`[Bridge] Platform: ${process.platform} ${process.arch} @ ${os.hostname()}`);
     console.log(`[Bridge] Node: ${process.version}`);
 
-    // 连接成功后异步检查更新（不阻塞主流程）
-    checkUpdate(false).catch(() => {});
+    // 连接成功后异步检查更新，结果推给 UI
+    checkUpdate(false).then(hasUpdate => {
+      if (ui) ui.broadcastVersionInfo(CURRENT_VERSION, hasUpdate ? latestVersionCache : null);
+    }).catch(() => {
+      if (ui) ui.broadcastVersionInfo(CURRENT_VERSION, null);
+    });
 
     // 上报 bridge 信息
     sendToServer({
