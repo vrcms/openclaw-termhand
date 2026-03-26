@@ -126,12 +126,12 @@ function renderSidebar() {
     <div class="session-group">
       <div class="session-group-header">
         <span>📁</span>
-        <span class="session-group-cwd" title="${escHtml(cwd)}">${escHtml(cwd.split(/[\\/]/).pop() || cwd)}</span>
+        <span class="session-group-cwd" title="${escHtml(cwd)}">${escHtml(cwd === '默认目录' ? cwd : (cwd.split(/[\\/]/).pop() || cwd))}</span>
         <span style="font-size:10px;opacity:.6" title="${escHtml(cwd)}">${list.length}</span>
       </div>
       ${list.map(s => `
         <div class="session-item ${activeSession===s.id?'active':''}" onclick="selectSession('${s.id}')">
-          <div class="session-id">${s.id}</div>
+          <div class="session-id">${escHtml(s.id)}</div>
           <div class="session-preview" id="preview-${s.id}">${escHtml(s.lastOutput||'')}</div>
         </div>
       `).join('')}
@@ -183,6 +183,28 @@ function renderDirTree(dirs, selectedRef, container) {
   });
 }
 
+async function doCreateSession() {
+  const cwd = (document.getElementById('th-cwd-input').value || '').trim() || null;
+  const cmd = (document.getElementById('th-cmd-input').value || '').trim();
+  const id = 's' + (Date.now() % 100000);
+  try {
+    await fetch('/api/new-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: id, cwd })
+    });
+    // 创建后自动发送启动命令
+    if (cmd) {
+      setTimeout(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'input', sessionId: id, data: cmd + '\r' }));
+        }
+      }, 800);
+    }
+  } catch (e) {}
+  layer.closeAll();
+}
+
 function newSession() {
   const selectedRef = { value: '' };
   layer.open({
@@ -203,10 +225,14 @@ function newSession() {
           <button onclick="document.getElementById('th-cwd-input').value='E:\\\\';doBrowse()" style="padding:2px 8px;background:#3c3c3c;border:1px solid #555;color:#ccc;border-radius:3px;cursor:pointer;font-size:11px">E:</button>
           <button onclick="document.getElementById('th-cwd-input').value='/';doBrowse()" style="padding:2px 8px;background:#3c3c3c;border:1px solid #555;color:#ccc;border-radius:3px;cursor:pointer;font-size:11px">/</button>
         </div>
-        <div id="th-dir-tree" style="height:190px;overflow-y:auto;background:#1e1e1e;border:1px solid #333;border-radius:3px;padding:4px"></div>
+        <div id="th-dir-tree" style="height:150px;overflow-y:auto;background:#1e1e1e;border:1px solid #333;border-radius:3px;padding:4px"></div>
+        <div style="margin-top:10px">
+          <div style="margin-bottom:4px;font-size:12px;color:#888">启动命令（可选，留空只打开 shell）</div>
+          <input id="th-cmd-input" type="text" placeholder="例如: npm run dev" style="width:100%;padding:6px 10px;background:#2d2d2d;border:1px solid #555;color:#ccc;border-radius:3px;font-size:13px">
+        </div>
         <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
           <button onclick="layer.closeAll()" style="padding:6px 16px;background:#3c3c3c;border:1px solid #555;color:#ccc;border-radius:3px;cursor:pointer">取消</button>
-          <button onclick="(()=>{const cwd=document.getElementById('th-cwd-input').value||null;const id='s'+(sessions.length+1);fetch('/api/new-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:id,cwd})}).catch(()=>{});layer.closeAll()})()" style="padding:6px 16px;background:#0e639c;border:none;color:#fff;border-radius:3px;cursor:pointer">创建</button>
+          <button onclick="doCreateSession()" style="padding:6px 16px;background:#0e639c;border:none;color:#fff;border-radius:3px;cursor:pointer">创建</button>
         </div>
       </div>
     `,
