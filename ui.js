@@ -99,8 +99,10 @@ function startUIServer(sessions, port) {
         if (msg.type === 'input' && msg.sessionId && msg.data) {
           const session = sessions.get(msg.sessionId);
           if (session) {
-            if (session.proc && session.proc.stdin) session.proc.stdin.write(msg.data);
-            else if (session.proc && session.proc.write) session.proc.write(msg.data);
+            // cmd.exe 管道模式需要 \r\n，xterm 只发 \r
+            const data = msg.data.replace(/\r(?!\n)/g, '\r\n');
+            if (session.proc && session.proc.stdin) session.proc.stdin.write(data);
+            else if (session.proc && session.proc.write) session.proc.write(data);
           }
         }
       } catch (e) {}
