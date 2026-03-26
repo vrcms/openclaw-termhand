@@ -188,20 +188,29 @@ async function doCreateSession() {
   const cmd = (document.getElementById('th-cmd-input').value || '').trim();
   const id = 's' + (Date.now() % 100000);
   try {
-    await fetch('/api/new-session', {
+    const r = await fetch('/api/new-session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId: id, cwd })
     });
-    // 创建后自动发送启动命令
-    if (cmd) {
-      setTimeout(() => {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'input', sessionId: id, data: cmd + '\r' }));
-        }
-      }, 800);
+    const data = await r.json();
+    if (data.ok) {
+      // 主动刷新 session 列表，不依赖 WS 推送
+      const sr = await fetch('/api/sessions');
+      const sd = await sr.json();
+      if (sd.sessions) updateSessions(sd.sessions);
+      // 自动切换到新 session
+      setTimeout(() => selectSession(id), 200);
+      // 创建后自动发送启动命令
+      if (cmd) {
+        setTimeout(() => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'input', sessionId: id, data: cmd + '\r' }));
+          }
+        }, 800);
+      }
     }
-  } catch (e) {}
+  } catch (e) { console.error('doCreateSession error:', e); }
   layer.closeAll();
 }
 
