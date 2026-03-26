@@ -67,8 +67,8 @@ const getArg = (name) => { const i = args.indexOf(name); return i !== -1 ? args[
 
 // --update 模式
 if (args.includes('--update')) {
-  checkUpdate(true);
-  process.exit(0);
+  checkUpdate(true).then(() => process.exit(0)).catch((e) => { console.error('[TermHand] 更新失败:', e.message); process.exit(1); });
+  return;
 }
 
 const SERVER_URL = getArg('--server') || process.env.TERMHAND_SERVER;
