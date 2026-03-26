@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TermHand 终端手</title>
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #1e1e1e; color: #ccc; font-family: 'Segoe UI', sans-serif; display: flex; height: 100vh; overflow: hidden; }
+
+/* 左侧 session 列表 */
+#sidebar { width: 220px; min-width: 180px; background: #252526; border-right: 1px solid #333; display: flex; flex-direction: column; }
+#sidebar-header { padding: 12px 16px; font-size: 13px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #333; }
+#session-list { flex: 1; overflow-y: auto; }
+.session-item { padding: 10px 16px; cursor: pointer; border-bottom: 1px solid #2d2d2d; transition: background 0.15s; }
+.session-item:hover { background: #2a2d2e; }
+.session-item.active { background: #094771; }
+.session-name { font-size: 13px; color: #ddd; font-weight: 500; }
+.session-preview { font-size: 11px; color: #666; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: monospace; }
+.session-status { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #4ec9b0; margin-right: 6px; }
+#no-sessions { padding: 20px 16px; color: #555; font-size: 12px; }
+
+/* 布局控制 */
+#layout-bar { padding: 8px 16px; background: #252526; border-bottom: 1px solid #333; display: flex; gap: 8px; align-items: center; }
+.layout-btn { background: #3c3c3c; border: 1px solid #555; color: #ccc; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+.layout-btn:hover, .layout-btn.active { background: #094771; border-color: #007acc; color: #fff; }
+#conn-status { margin-left: auto; font-size: 12px; }
+.connected { color: #4ec9b0; }
+.disconnected { color: #f44747; }
+
+/* 右侧终端区 */
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#terminals { flex: 1; display: grid; gap: 2px; background: #333; overflow: hidden; }
+.term-pane { background: #1e1e1e; display: flex; flex-direction: column; overflow: hidden; }
+.term-title { padding: 4px 12px; background: #2d2d2d; font-size: 12px; color: #888; border-bottom: 1px solid #333; display: flex; justify-content: space-between; }
+.term-body { flex: 1; overflow: hidden; padding: 4px; }
+.term-input-row { display: flex; background: #252526; border-top: 1px solid #333; }
+.term-input { flex: 1; background: transparent; border: none; color: #ddd; font-family: monospace; font-size: 13px; padding: 6px 12px; outline: none; }
+.term-send { background: #007acc; border: none; color: #fff; padding: 6px 14px; cursor: pointer; font-size: 12px; }
+.term-send:hover { background: #005fa3; }
+</style>
+</head>
+<body>
+<div id="sidebar">
+  <div id="sidebar-header">Sessions</div>
+  <div id="session-list"><div id="no-sessions">等待 bridge 连接...</div></div>
+</div>
+<div id="main">
+  <div id="layout-bar">
+    <button class="layout-btn active" onclick="setLayout(1)">1×</button>
+    <button class="layout-btn" onclick="setLayout(2)">2×</button>
+    <button class="layout-btn" onclick="setLayout(4)">4×</button>
+    <span id="conn-status" class="disconnected">● 未连接</span>
+  </div>
+  <div id="terminals"></div>
+</div>
+
+<script>
+let ws = null;
+let sessions = {};
+let activeSession = null;
+let layout = 1;
+let terms = {}; // sessionId -> xterm instance
+
+function connect() {
+  ws = new WebSocket('ws://localhost:7654/ui-ws');
+  ws.onopen = () => {
+    document.getElementById('conn-status').textContent = '● 已连接';
+    document.getElementById('conn-status').className = 'connected';
+    ws.send(JSON.stringify({ type: 'get_sessions' }));
+  };
+  ws.onclose = () => {
+    document.getElementById('conn-status').textContent = '● 未连接';
+    document.getElementById('conn-status').className = 'disconnected';
+    setTimeout(connect, 2000);
+  };
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'sessions') updateSessions(msg.sessions);
+    if (msg.type === 'output') appendOutput(msg.sessionId, msg.data);
+  };
+}
+
+function updateSessions(list) {
+  sessions = {};
+  list.forEach(s => sessions[s.id] = s);
+  renderSidebar();
+  renderTerminals();
+}
+
+function renderSidebar() {
+  const el = document.getElementById('session-list');
+  if (Object.keys(sessions).length === 0) {
+    el.innerHTML = '<div id="no-sessions">暂无活跃 session</div>';
+    return;
+  }
+  el.innerHTML = Object.values(sessions).map(s => `
+    <div class="session-item ${s.id === activeSession ? 'active' : ''}" onclick="selectSession('${s.id}')">
+      <div class="session-name"><span class="session-status"></span>${s.id}</div>
+      <div class="session-preview">${escHtml(s.lastOutput || '')}</div>
+    </div>
+  `).join('');
+}
+
+function renderTerminals() {
+  const ids = Object.keys(sessions);
+  if (ids.length === 0) return;
+  if (!activeSession || !sessions[activeSession]) activeSession = ids[0];
+
+  const container = document.getElementById('terminals');
+  const count = Math.min(layout, ids.length);
+  container.style.gridTemplateColumns = count >= 2 ? '1fr 1fr' : '1fr';
+  container.style.gridTemplateRows = count >= 4 ? '1fr 1fr' : '1fr';
+
+  const shown = ids.slice(0, count);
+  container.innerHTML = '';
+  terms = {};
+
+  shown.forEach(id => {
+    const pane = document.createElement('div');
+    pane.className = 'term-pane';
+    pane.innerHTML = `
+      <div class="term-title">
+        <span>${id}</span>
+        <span style="cursor:pointer" onclick="popout('${id}')">⧉ 浮窗</span>
+      </div>
+      <div class="term-body" id="term-body-${id}"></div>
+      <div class="term-input-row">
+        <input class="term-input" id="term-input-${id}" placeholder="输入命令..." onkeydown="handleKey(event,'${id}')">
+        <button class="term-send" onclick="sendInput('${id}')">发送</button>
+      </div>
+    `;
+    container.appendChild(pane);
+
+    // 初始化 xterm
+    const term = new Terminal({ theme: { background: '#1e1e1e' }, fontSize: 13, cursorBlink: true });
+    const fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(document.getElementById('term-body-' + id));
+    fitAddon.fit();
+    terms[id] = term;
+
+    // 写入历史输出
+    if (sessions[id] && sessions[id].outputBuf) {
+      term.write(sessions[id].outputBuf);
+    }
+  });
+}
+
+function appendOutput(sessionId, data) {
+  if (sessions[sessionId]) {
+    sessions[sessionId].lastOutput = data.replace(/\x1b\[[\d;]*m/g, '').slice(-50);
+    const sidebar = document.querySelector(`.session-item .session-preview`);
+    if (sidebar) renderSidebar();
+  }
+  if (terms[sessionId]) terms[sessionId].write(data);
+}
+
+function selectSession(id) {
+  activeSession = id;
+  renderSidebar();
+}
+
+function setLayout(n) {
+  layout = n;
+  document.querySelectorAll('.layout-btn').forEach((b, i) => {
+    b.classList.toggle('active', [1,2,4][i] === n);
+  });
+  renderTerminals();
+}
+
+function handleKey(e, id) {
+  if (e.key === 'Enter') sendInput(id);
+}
+
+function sendInput(id) {
+  const input = document.getElementById('term-input-' + id);
+  if (!input || !input.value.trim()) return;
+  ws.send(JSON.stringify({ type: 'input', sessionId: id, data: input.value + '\n' }));
+  input.value = '';
+}
+
+function popout(id) {
+  window.open('/?session=' + id, '_blank', 'width=900,height=600');
+}
+
+function escHtml(s) {
+  return s.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+connect();
+// 定期刷新 session 列表
+setInterval(() => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'get_sessions' })); }, 2000);
+</script>
+</body>
+</html>

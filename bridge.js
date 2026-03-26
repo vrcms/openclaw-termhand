@@ -17,6 +17,7 @@ const https = require('https');
 const http = require('http');
 const fs = require('fs');
 const WebSocket = require('ws');
+const { startUIServer } = require('./ui');
 
 const CURRENT_VERSION = '0.1.3';
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vrcms/openclaw-termhand/master';
@@ -155,6 +156,7 @@ function createSession(sessionId, shell) {
     session.outputBuf.push(text);
     if (session.outputBuf.length > 1000) session.outputBuf.shift();
     sendToServer({ type: 'session_output', sessionId, text });
+    if (ui) ui.broadcast(sessionId, text);
   });
 
   proc.stderr.on('data', (data) => {
@@ -162,6 +164,7 @@ function createSession(sessionId, shell) {
     session.outputBuf.push(text);
     if (session.outputBuf.length > 1000) session.outputBuf.shift();
     sendToServer({ type: 'session_output', sessionId, text });
+    if (ui) ui.broadcast(sessionId, text);
   });
 
   proc.on('exit', (code) => {
@@ -362,6 +365,9 @@ console.log(`  Platform: ${process.platform} ${process.arch}`);
 console.log(`  Node: ${process.version}`);
 console.log(`  Server: ${SERVER_URL}`);
 console.log('='.repeat(50));
+
+// 启动本地 UI 管理界面（http://localhost:7654）
+const ui = startUIServer(sessions, 7654);
 
 connect();
 
