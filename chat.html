@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Chat OpenClaw</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; background:#0d0d0d; color:#00ff41; font-family:'Courier New',Courier,monospace; font-size:14px; }
+#terminal {
+  display:flex; flex-direction:column; height:100vh; padding:12px;
+}
+#output {
+  flex:1; overflow-y:auto; white-space:pre-wrap; word-break:break-all;
+  padding-bottom:8px;
+}
+#output .line { line-height:1.6; }
+#output .line.user { color:#7ec8e3; }
+#output .line.ai { color:#00ff41; }
+#output .line.sys { color:#888; font-style:italic; }
+#output .line.err { color:#ff4444; }
+#input-row {
+  display:flex; align-items:center; border-top:1px solid #1a1a1a;
+  padding-top:8px; gap:6px;
+}
+#prompt { color:#00ff41; white-space:nowrap; }
+#input {
+  flex:1; background:transparent; border:none; outline:none;
+  color:#fff; font-family:inherit; font-size:14px; caret-color:#00ff41;
+}
+#cursor {
+  display:inline-block; width:8px; height:14px;
+  background:#00ff41; animation:blink 1s step-end infinite;
+  vertical-align:text-bottom;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+::-webkit-scrollbar { width:4px; }
+::-webkit-scrollbar-track { background:#111; }
+::-webkit-scrollbar-thumb { background:#333; }
+</style>
+</head>
+<body>
+<div id="terminal">
+  <div id="output">
+    <div class="line sys">OpenClaw Chat Terminal — 输入消息后按 Enter 发送</div>
+    <div class="line sys">─────────────────────────────────────</div>
+  </div>
+  <div id="input-row">
+    <span id="prompt">&gt;&nbsp;</span>
+    <input id="input" type="text" autofocus autocomplete="off" placeholder="输入消息..." />
+  </div>
+</div>
+
+<script>
+const output = document.getElementById('output');
+const input = document.getElementById('input');
+
+// 从 bridge 本地 ui.js WS 获取配置
+const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+const ws = new WebSocket(`${wsProto}://${location.host}`);
+
+let history = [];
+let histIdx = -1;
+let waiting = false;
+
+ws.onopen = () => {
+  ws.send(JSON.stringify({ type: 'get_version' }));
+};
+
+ws.onmessage = (e) => {
+  try {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'chat_reply') {
+      appendLine('ai', msg.text);
+      waiting = false;
+      input.disabled = false;
+      input.focus();
+    } else if (msg.type === 'chat_error') {
+      appendLine('err', '错误: ' + (msg.error || '未知错误'));
+      waiting = false;
+      input.disabled = false;
+      input.focus();
+    }
+  } catch {}
+};
+
+ws.onerror = () => appendLine('err', 'WebSocket 连接失败');
+ws.onclose = () => appendLine('sys', '连接已断开');
+
+function appendLine(type, text) {
+  const div = document.createElement('div');
+  div.className = 'line ' + type;
+  if (type === 'user') text = '你: ' + text;
+  if (type === 'ai') text = 'AI: ' + text;
+  div.textContent = text;
+  output.appendChild(div);
+  output.scrollTop = output.scrollHeight;
+}
+
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !waiting) {
+    const text = input.value.trim();
+    if (!text) return;
+    history.unshift(text);
+    histIdx = -1;
+    appendLine('user', text);
+    input.value = '';
+    waiting = true;
+    input.disabled = true;
+    ws.send(JSON.stringify({ type: 'chat', message: text }));
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (histIdx < history.length - 1) { histIdx++; input.value = history[histIdx]; }
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (histIdx > 0) { histIdx--; input.value = history[histIdx]; }
+    else { histIdx = -1; input.value = ''; }
+  }
+});
+</script>
+</body>
+</html>
