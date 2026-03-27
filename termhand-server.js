@@ -292,6 +292,18 @@ function registerRoutes(app) {
     }
   });
 
+  // 主动通知 bridge（在用户终端打印消息）
+  app.post('/termhand/notify', (req, res) => {
+    const { message } = req.body || {};
+    if (!message) return res.status(400).json({ ok: false, error: 'message required' });
+    try {
+      sendToBridge({ type: 'notify', message });
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(503).json({ ok: false, error: e.message });
+    }
+  });
+
   // 下载 termhand.zip 安装包
   app.get('/download', (req, res) => {
     const zipPath = require('path').resolve(__dirname, 'termhand.zip');
