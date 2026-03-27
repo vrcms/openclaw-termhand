@@ -332,15 +332,23 @@ function registerRoutes(app) {
     try {
       const { message } = req.body;
       if (!message) return res.status(400).json({ ok: false, error: 'message required' });
-      // 通过 openclaw gateway 发消息到飞书 CEO session
-      const { execSync } = require('child_process');
-      const escaped = message.replace(/'/g, "'\\''");
-      try {
-        execSync(`openclaw message send --channel feishu --target ou_8e9f7214c4a8e290dc66ff1b9acce7ac --message '${escaped}'`, { timeout: 10000 });
-        res.json({ ok: true, reply: '消息已发送给 OpenClaw' });
-      } catch(e) {
-        res.status(500).json({ ok: false, error: 'openclaw message failed: ' + e.message });
-      }
+      const { spawn } = require('child_process');
+      const child = spawn('openclaw', [
+        'message', 'send',
+        '--channel', 'feishu',
+        '--target', 'ou_8e9f7214c4a8e290dc66ff1b9acce7ac',
+        '--message', `[TermHand] ${message}`
+      ], { timeout: 15000 });
+      let stderr = '';
+      child.stderr.on('data', d => stderr += d);
+      child.on('close', code => {
+        if (code === 0) {
+          res.json({ ok: true, reply: '消息已发送给 OpenClaw ✓' });
+        } else {
+          res.status(500).json({ ok: false, error: 'send failed: ' + stderr.slice(0, 200) });
+        }
+      });
+      child.on('error', e => res.status(500).json({ ok: false, error: e.message }));
     } catch(e) {
       res.status(500).json({ ok: false, error: e.message });
     }
