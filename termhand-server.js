@@ -327,6 +327,25 @@ function registerRoutes(app) {
     }
   });
 
+  // ── Chat: 从 TermHand 桌面应用转发消息给 OpenClaw ──
+  app.post('/chat', async (req, res) => {
+    try {
+      const { message } = req.body;
+      if (!message) return res.status(400).json({ ok: false, error: 'message required' });
+      // 通过 openclaw gateway 发消息到飞书 CEO session
+      const { execSync } = require('child_process');
+      const escaped = message.replace(/'/g, "'\\''");
+      try {
+        execSync(`openclaw message send --channel feishu --target ou_8e9f7214c4a8e290dc66ff1b9acce7ac --message '${escaped}'`, { timeout: 10000 });
+        res.json({ ok: true, reply: '消息已发送给 OpenClaw' });
+      } catch(e) {
+        res.status(500).json({ ok: false, error: 'openclaw message failed: ' + e.message });
+      }
+    } catch(e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
 }
 
 module.exports = { handleBridgeConnection, registerRoutes, getBridgeToken: () => config.bridgeToken };
