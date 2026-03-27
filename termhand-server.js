@@ -292,18 +292,6 @@ function registerRoutes(app) {
     }
   });
 
-  // 主动通知 bridge（在用户终端打印消息）
-  app.post('/termhand/notify', (req, res) => {
-    const { message } = req.body || {};
-    if (!message) return res.status(400).json({ ok: false, error: 'message required' });
-    try {
-      sendToBridge({ type: 'notify', message });
-      res.json({ ok: true });
-    } catch (e) {
-      res.status(503).json({ ok: false, error: e.message });
-    }
-  });
-
   // 下载 termhand.zip 安装包
   app.get('/download', (req, res) => {
     const zipPath = require('path').resolve(__dirname, 'termhand.zip');
@@ -335,33 +323,6 @@ function registerRoutes(app) {
       const result = await waitForResponse('oneshot_' + requestId, timeout || 30000);
       res.json({ ok: true, ...result });
     } catch (e) {
-      res.status(500).json({ ok: false, error: e.message });
-    }
-  });
-
-  // ── Chat: 从 TermHand 桌面应用转发消息给 OpenClaw ──
-  app.post('/chat', async (req, res) => {
-    try {
-      const { message } = req.body;
-      if (!message) return res.status(400).json({ ok: false, error: 'message required' });
-      const { spawn } = require('child_process');
-      const child = spawn('openclaw', [
-        'message', 'send',
-        '--channel', 'feishu',
-        '--target', 'ou_8e9f7214c4a8e290dc66ff1b9acce7ac',
-        '--message', `[TermHand] ${message}`
-      ], { timeout: 15000 });
-      let stderr = '';
-      child.stderr.on('data', d => stderr += d);
-      child.on('close', code => {
-        if (code === 0) {
-          res.json({ ok: true, reply: '消息已发送给 OpenClaw ✓' });
-        } else {
-          res.status(500).json({ ok: false, error: 'send failed: ' + stderr.slice(0, 200) });
-        }
-      });
-      child.on('error', e => res.status(500).json({ ok: false, error: e.message }));
-    } catch(e) {
       res.status(500).json({ ok: false, error: e.message });
     }
   });

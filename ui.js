@@ -40,19 +40,6 @@ function startUIServer(sessions, port, sendToServer, serverWsUrl, token, bridgeV
       return;
     }
 
-    if (url === '/chat') {
-      const htmlPath = path.resolve(__dirname, 'chat.html');
-      try {
-        const html = fs.readFileSync(htmlPath, 'utf8');
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(html);
-      } catch (e) {
-        res.writeHead(500);
-        res.end('chat.html not found');
-      }
-      return;
-    }
-
     if (url === '/api/sessions') {
       const list = Array.from(sessions.entries()).map(([id, s]) => ({
         id,
@@ -194,41 +181,6 @@ function startUIServer(sessions, port, sendToServer, serverWsUrl, token, bridgeV
         }
         if (msg.type === 'do_update') {
           if (typeof onDoUpdate === 'function') onDoUpdate();
-          return;
-        }
-        if (msg.type === 'chat' && msg.message) {
-          // 转发给 VPS /chat 接口，回复推回给这个 ws 客户端
-          const chatWs = ws;
-          if (typeof sendToServer === 'function') {
-            sendToServer({ type: 'chat', message: msg.message, _chatReply: true });
-          }
-          // 通过 HTTP 调 VPS /chat 端点
-          const http = require('http');
-          const body = JSON.stringify({ message: msg.message });
-          const reqOpts = {
-            hostname: serverHost,
-            port: serverPort,
-            path: '/chat',
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), 'x-bridge-token': token || '' },
-          };
-          const req = http.request(reqOpts, (res2) => {
-            let data = '';
-            res2.on('data', d => data += d);
-            res2.on('end', () => {
-              try {
-                const j = JSON.parse(data);
-                if (chatWs.readyState === 1) chatWs.send(JSON.stringify({ type: 'chat_reply', text: j.reply || j.text || data }));
-              } catch {
-                if (chatWs.readyState === 1) chatWs.send(JSON.stringify({ type: 'chat_reply', text: data }));
-              }
-            });
-          });
-          req.on('error', (e) => {
-            if (chatWs.readyState === 1) chatWs.send(JSON.stringify({ type: 'chat_error', error: e.message }));
-          });
-          req.write(body);
-          req.end();
           return;
         }
         if (msg.type === 'input' && msg.sessionId && msg.data) {

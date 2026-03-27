@@ -19,7 +19,7 @@ const fs = require('fs');
 const WebSocket = require('ws');
 const { startUIServer } = require('./ui');
 
-const CURRENT_VERSION = '0.1.32';
+const CURRENT_VERSION = '0.1.30';
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vrcms/openclaw-termhand/master';
 const VPS_DOWNLOAD = 'http://149.13.91.10:9877';
 
@@ -355,10 +355,6 @@ function handleServerMessage(msg) {
 
     case 'ping':
       sendToServer({ type: 'pong' });
-      break;
-
-    case 'notify':
-      console.log(`\n[TermHand] 📢 ${msg.message || '(no message)'}`);
       break;
 
 
